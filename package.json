@@ -1,0 +1,25 @@
+{
+  "name": "figment",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "lab": "tsx scripts/lab.ts",
+    "studio": "pnpm --filter @figment/studio dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@figment/core": "workspace:*",
+    "@figment/krea": "workspace:*",
+    "@figment/project": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

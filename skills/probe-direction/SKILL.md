@@ -1,0 +1,21 @@
+---
+name: probe-direction
+description: Design and run a deliberately small Krea image experiment that answers one creative question cheaply while preserving Figment provenance.
+---
+
+# Probe a direction
+
+Read the brief, decisions, relevant references, and recent generations. Define one falsifiable question or hypothesis. Change as few variables as possible and normally use one to four outputs.
+
+Use the live model workflow in `../research-models/SKILL.md` when the model or schema has not just been verified. Inspect references visually when they matter; never modify originals. For any reference, use the exact reference input field from the live model schema.
+
+Before running, state the model, count, controlled variable, and estimated total cost (or that Krea does not expose one). Then call shared tooling:
+
+```bash
+pnpm lab probe <project> --model <id> --prompt <prompt> --count <n> \
+  --purpose <purpose> --hypothesis <question> --params '<json>'
+```
+
+Add `--reference <path> --reference-field <schema-field>` only when needed. The path must remain inside the project's `references/` directory. If the schema expects reference objects, add `--reference-array --reference-template '{"url":"$url"}'` with any schema-supported strength fields. Use `--cost-per-image <usd>` when current official pricing is known but the live catalogue does not expose it.
+
+After completion, inspect the local outputs, summarize evidence rather than taste alone, and add the conclusion to the probe manifest. Log a decision only if the human actually commits to a direction. If interrupted, run `pnpm lab reconcile <project>`; do not resubmit blindly.

@@ -1,4 +1,4 @@
-# Figment
+# <img src="apps/studio/public/fig-avatar.png" width="42" alt="Figment mascot"> Figment
 
 Figment is a clonable, agent-first creative lab for developing visual projects with the Krea API. A human and coding agent shape a brief, research live models, run inexpensive probes, preserve generation provenance, compare results, and prototype around the strongest directions.
 
@@ -6,18 +6,18 @@ The filesystem is the product memory. Projects are readable Markdown, JSON, and 
 
 > **Early alpha:** Figment is usable today, but its interfaces and project schemas may still evolve. Image generation is the supported media workflow; Studio is local-first, and published gallery builds are read-only. Keep valuable work in Git or another backup and inspect generated static builds before publishing them.
 
-<p align="center">
-  <img src="apps/studio/public/fig-avatar.png" width="128" alt="Fig, the quiet Figment mascot">
-</p>
-
 ## First five minutes
 
 Requirements: Node.js 20+ and pnpm 10+.
 
 ```bash
+git clone https://github.com/jh3y/figment.git your-studio-name
+cd your-studio-name
 pnpm install
 cp .env.example .env
 ```
+
+Replace `your-studio-name` with the name you want for your own creative studio directory.
 
 1. Create a token in [Krea API Tokens](https://www.krea.ai/settings/api-tokens). Krea shows the full token only once.
 2. Add it to `.env` as `KREA_API_KEY`.
@@ -36,13 +36,14 @@ Krea API billing is separate from Krea subscriptions and web-app compute units. 
 
 Ask your coding agent: **“Start a new project.”** The agent should behave like a creative studio partner: understand the goal, develop the brief conversationally, investigate the right current models, propose inexpensive experiments, and explain what each round will help decide.
 
-Useful ways to continue the conversation include:
+The human should not need to know Figment's workflow commands or prompt the agent through every stage. The agent should actively:
 
-- “Research the best current models for this brief.”
-- “What should we test next, and why?”
-- “Run the cheapest useful probe before we commit to a batch.”
-- “Review my grades and recommend the next direction.”
-- “Build a prototype around this shortlisted generation.”
+- ask the high-leverage questions needed to understand the goal, audience, deliverable, timing, constraints, and budget where relevant
+- research and recommend the best current models for the brief before generating
+- explain what should be tested next and why
+- propose the cheapest useful probe before committing to a substantial batch
+- interpret human grades and recommend which direction to develop
+- suggest an appropriate prototype when a shortlisted generation is ready to be tested in context
 
 For a direct CLI start:
 
@@ -54,17 +55,7 @@ pnpm studio
 
 Studio opens at `http://127.0.0.1:4173`. It provides project browsing, briefs, decisions, references, a filtered gallery, image lightbox, provenance, and review controls. Reviews are atomically written back to generation JSON, with visible saving, saved, or failed feedback in the lightbox. The interface supports system, light, and dark themes; the preference stays local to the browser.
 
-The repository starts with an empty `projects/` directory so a clone contains your work, not Figment's entire mascot exploration archive. Curated Fig identity assets remain as a compact worked example of what the loop can produce, and the bundled Studio avatar and favicon live under `apps/studio/public/` independently of project state. The complete internal Fig exploration is deliberately not distributed with the starter.
-
-### Meet Fig
-
-Fig is Figment's quiet mascot: rounded, observant, and expressive through posture rather than speech. The production set grew from a reviewed project direction into a repeatable character system rather than a one-off logo.
-
-| Turnaround | Expressions | Posture and behaviour |
-| --- | --- | --- |
-| ![Fig neutral turnaround](docs/assets/fig-turnaround.jpg) | ![Fig quiet expression sheet](docs/assets/fig-expressions.jpg) | ![Fig posture and behaviour sheet](docs/assets/fig-behavior.jpg) |
-
-See [Fig's compact identity notes](docs/fig-identity.md) for the character rules and source assets. Hover or keyboard-focus the avatar beside “Figment” in Studio for a small easter egg.
+The repository starts with an empty `projects/` directory. Studio branding lives independently under `apps/studio/public/`, so it does not add example project state to a new clone.
 
 Inside the lightbox, use the arrow keys to navigate and review without leaving the keyboard:
 

@@ -18,6 +18,6 @@ When the brief is strong enough to guide a useful probe:
 1. Run `pnpm lab new --title <title> --description <short description> --json` from the repository root. Add `--tag` values only when the human established them.
 2. Replace the created `brief.md` sections with the developed context. Leave unresolved sections honest and concise.
 3. Add dated entries to `decisions.md` only for meaningful choices already made, including why and what remains unresolved.
-4. Tell the human where the project lives and suggest the single most useful next question or probe.
+4. Tell the human where the project lives and proactively recommend the single most useful next step. If model research, a cheap probe, review, a controlled batch, or a prototype is appropriate, propose it in plain language and explain what it will help decide; do not wait for the human to know the workflow name.
 
 The CLI derives the project year from creation time. Never move an older project into the current year.

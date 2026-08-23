@@ -127,7 +127,7 @@ export class ProjectRepository {
     return records.sort((a, b) => b.metadata.createdAt.localeCompare(a.metadata.createdAt));
   }
 
-  async updateReview(metadataPath: string, patch: Partial<ReviewMetadata>): Promise<GenerationRecord> {
+  async updateReview(metadataPath: string, patch: Record<string, unknown>): Promise<GenerationRecord> {
     const resolved = resolve(metadataPath);
     const allowedRoot = `${resolve(this.root)}${sep}`;
     if (!resolved.startsWith(allowedRoot) || basename(resolved) === "manifest.json") {
@@ -135,7 +135,16 @@ export class ProjectRepository {
     }
     const record = JSON.parse(await readFile(resolved, "utf8")) as GenerationRecord;
     const existing = record.review ?? { favourite: false, signal: "unreviewed", tags: [] };
-    record.review = { ...existing, ...patch, updatedAt: new Date().toISOString() };
+    const next: ReviewMetadata = { ...existing };
+    if (typeof patch.favourite === "boolean") next.favourite = patch.favourite;
+    if (["unreviewed", "shortlist", "reject"].includes(String(patch.signal))) next.signal = String(patch.signal) as ReviewMetadata["signal"];
+    if (patch.rating === null) delete next.rating;
+    else if (typeof patch.rating === "number" && Number.isInteger(patch.rating) && patch.rating >= 1 && patch.rating <= 5) next.rating = patch.rating;
+    if (Array.isArray(patch.tags) && patch.tags.every((tag) => typeof tag === "string")) next.tags = [...new Set(patch.tags)];
+    if (typeof patch.note === "string") next.note = patch.note;
+    if (patch.agentAnalysis && typeof patch.agentAnalysis === "object" && !Array.isArray(patch.agentAnalysis)) next.agentAnalysis = patch.agentAnalysis as Record<string, unknown>;
+    next.updatedAt = new Date().toISOString();
+    record.review = next;
     await writeJson(resolved, record);
     await this.touchProjectForPath(resolved);
     return record;

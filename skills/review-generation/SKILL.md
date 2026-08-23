@@ -16,4 +16,6 @@ pnpm lab review --file <generation.json> --favourite true \
   --signal shortlist --tag <tag> --note <note> --json
 ```
 
-Signals are `shortlist`, `reject`, or `unreviewed`. Rating is optional. Do not force every output into a score. Add a probe conclusion when evidence answers its question; add `decisions.md` history only when a meaningful direction is accepted, rejected, or reversed.
+Signals are `shortlist`, `reject`, or `unreviewed`, alongside the Favourite flag. Keep review directional; do not introduce numerical scoring unless an existing project explicitly depends on it. Add a probe conclusion when evidence answers its question; add `decisions.md` history only when a meaningful direction is accepted, rejected, or reversed.
+
+After a meaningful review round, summarize patterns without pretending to know the human's reasons. If the next generation strategy depends on whether the human liked silhouette, expression, rendering, novelty, or something else, ask directly before converting the grades into a larger batch.

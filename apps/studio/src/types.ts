@@ -6,7 +6,18 @@ export interface StudioProject {
   brief: string;
   decisions: string;
   references: Array<{ name: string; path: string; url: string }>;
-  prototypes: string[];
+  prototypes: StudioPrototype[];
+}
+
+export interface StudioPrototype {
+  slug: string;
+  title: string;
+  description?: string;
+  path: string;
+  launchUrl?: string;
+  entry?: string;
+  embeddable: boolean;
+  kind: "static" | "declared" | "folder";
 }
 
 export interface StudioGeneration {
@@ -14,6 +25,8 @@ export interface StudioGeneration {
   projectSlug: string;
   projectTitle: string;
   kind: "probe" | "batch";
+  category: string;
+  shotNumber: number;
   batchName: string;
   manifest: BatchManifest;
   metadata: GenerationRecord;
@@ -25,6 +38,7 @@ export interface StudioGeneration {
 
 export interface StudioData {
   scannedAt: string;
+  readOnly?: boolean;
   projects: StudioProject[];
   generations: StudioGeneration[];
 }

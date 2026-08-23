@@ -1,12 +1,15 @@
 {
   "name": "figment",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.15.0",
   "engines": { "node": ">=20" },
   "scripts": {
     "lab": "tsx scripts/lab.ts",
     "studio": "pnpm --filter @figment/studio dev",
+    "studio:build": "pnpm --filter @figment/studio build",
+    "studio:preview": "pnpm --filter @figment/studio preview",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run"

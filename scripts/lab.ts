@@ -106,6 +106,7 @@ async function generate(kind: "probe" | "batch"): Promise<void> {
     id: compactId(kind),
     projectId: project.metadata.id,
     kind,
+    category: safeSlug(stringArg("category") ?? (kind === "probe" ? "probes" : "generations")),
     purpose,
     hypothesis: stringArg("hypothesis"),
     variable: stringArg("variable"),
@@ -223,6 +224,11 @@ async function finishGeneration(client: KreaAdapter, batchPath: string, record: 
   const files: string[] = [];
   for (const [index, url] of job.urls.entries()) {
     const result = await client.download(url);
+    const dimensions = pngDimensions(result.bytes, result.contentType);
+    if (index === 0 && dimensions) {
+      record.width = dimensions.width;
+      record.height = dimensions.height;
+    }
     const extension = extensionFor(result.contentType);
     const filename = `${record.id}${index ? `-${String(index + 1).padStart(2, "0")}` : ""}.${extension}`;
     const destination = join(batchPath, filename);
@@ -242,8 +248,8 @@ async function finishGeneration(client: KreaAdapter, batchPath: string, record: 
 async function prepareReferences(project: ProjectHandle): Promise<ReferenceRecord[]> {
   const paths = values("reference").map((path) => resolve(path));
   if (!paths.length) return [];
-  const referencesRoot = resolve(project.path, "references");
-  for (const path of paths) if (!path.startsWith(`${referencesRoot}/`)) throw new Error(`Reference must be inside ${relative(process.cwd(), referencesRoot)}: ${path}`);
+  const projectRoot = resolve(project.path);
+  for (const path of paths) if (path !== projectRoot && !path.startsWith(`${projectRoot}/`)) throw new Error(`Reference must be inside ${relative(process.cwd(), projectRoot)}: ${path}`);
   const mapPath = join(project.path, "references", ".krea-assets.json");
   let mappings: Record<string, ReferenceRecord> = {};
   try { mappings = JSON.parse(await readFile(mapPath, "utf8")); } catch { /* No uploads yet. */ }
@@ -351,6 +357,13 @@ function extensionFor(contentType?: string): string {
   return ({ "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif" } as Record<string, string>)[contentType ?? ""] ?? "png";
 }
 
+function pngDimensions(bytes: Uint8Array, contentType?: string): { width: number; height: number } | undefined {
+  if (contentType !== "image/png" || bytes.length < 24) return undefined;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0) !== 0x89504e47 || view.getUint32(4) !== 0x0d0a1a0a) return undefined;
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
 function setPath(target: Record<string, unknown>, path: string, value: unknown): void {
   const parts = path.split(".").filter(Boolean);
   if (!parts.length) throw new Error("--reference-field cannot be empty.");
@@ -371,5 +384,5 @@ function replaceUrlTemplate(value: unknown, url: string): unknown {
 }
 
 function help(): void {
-  process.stdout.write(`Figment creative lab\n\nCommands:\n  pnpm lab new --title <title> [--description ...] [--json]\n  pnpm lab projects [--json]\n  pnpm lab models [--refresh] [--json]\n  pnpm lab models --schema <model> [--json]\n  pnpm lab probe <project> --model <id> --prompt <text> [--reference <path> --reference-field <field>]\n  pnpm lab generate <project> --model <id> --prompt <text> [--count 4] [--yes]\n  pnpm lab review --file <generation.json> [--favourite true] [--signal shortlist|reject|unreviewed]\n  pnpm lab reconcile <project>\n  pnpm lab touch <project>\n  pnpm studio\n`);
+  process.stdout.write(`Figment creative lab\n\nCommands:\n  pnpm lab new --title <title> [--description ...] [--json]\n  pnpm lab projects [--json]\n  pnpm lab models [--refresh] [--json]\n  pnpm lab models --schema <model> [--json]\n  pnpm lab probe <project> --model <id> --prompt <text> [--category concepts] [--reference <path> --reference-field <field>]\n  pnpm lab generate <project> --model <id> --prompt <text> [--category concepts] [--count 4] [--yes]\n  pnpm lab review --file <generation.json> [--favourite true] [--signal shortlist|reject|unreviewed]\n  pnpm lab reconcile <project>\n  pnpm lab touch <project>\n  pnpm studio\n`);
 }

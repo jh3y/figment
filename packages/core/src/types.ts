@@ -83,6 +83,7 @@ export interface BatchManifest {
   id: string;
   projectId: string;
   kind: "probe" | "batch";
+  category?: string;
   purpose: string;
   hypothesis?: string;
   variable?: string;

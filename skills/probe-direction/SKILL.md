@@ -13,7 +13,7 @@ Before running, state the model, count, controlled variable, and estimated total
 
 ```bash
 pnpm lab probe <project> --model <id> --prompt <prompt> --count <n> \
-  --purpose <purpose> --hypothesis <question> --params '<json>'
+  --category <category> --purpose <purpose> --hypothesis <question> --params '<json>'
 ```
 
 Add `--reference <path> --reference-field <schema-field>` only when needed. The path must remain inside the project's `references/` directory. If the schema expects reference objects, add `--reference-array --reference-template '{"url":"$url"}'` with any schema-supported strength fields. Use `--cost-per-image <usd>` when current official pricing is known but the live catalogue does not expose it.

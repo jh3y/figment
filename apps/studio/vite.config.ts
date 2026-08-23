@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { writeJson } from "../../packages/core/src/index.ts";
+import { writeJson, type ProjectStatus } from "../../packages/core/src/index.ts";
 import { ProjectRepository, type GenerationHandle } from "../../packages/project/src/repository.ts";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -40,6 +40,12 @@ function filesystemApi(): Plugin {
             suppressReloadUntil = Date.now() + 1_000;
             const record = await repository.updateReview(resolve(repositoryRoot, body.metadataPath), body.review);
             return json(response, record);
+          }
+          if (request.method === "POST" && url.pathname === "/api/project-status") {
+            const body = await readBody(request) as { projectId?: string; status?: ProjectStatus };
+            if (!body.projectId || !body.status || !["active", "paused", "complete", "archived"].includes(body.status)) return json(response, { error: "Invalid project status payload" }, 400);
+            suppressReloadUntil = Date.now() + 1_000;
+            return json(response, await repository.updateStatus(body.projectId, body.status));
           }
           if (request.method === "GET" && url.pathname === "/project-file") {
             const relativePath = url.searchParams.get("path") ?? "";

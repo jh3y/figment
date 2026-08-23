@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ReviewMetadata } from "@figment/core";
+import type { ProjectStatus, ReviewMetadata } from "@figment/core";
 import { Markdown } from "./Markdown";
 import type { StudioData, StudioGeneration, StudioProject } from "./types";
 
@@ -22,6 +22,7 @@ export default function App() {
   const [tag, setTag] = useState("all");
   const [showRejected, setShowRejected] = useState(() => localStorage.getItem("figment-show-rejected") === "true");
   const [reviewSaves, setReviewSaves] = useState<Record<string, ReviewSaveState>>({});
+  const [projectSave, setProjectSave] = useState<ReviewSaveState>("idle");
   const [theme, setTheme] = useState<ThemePreference>(() => {
     const saved = localStorage.getItem("figment-theme");
     return saved === "light" || saved === "dark" ? saved : "system";
@@ -42,6 +43,7 @@ export default function App() {
 
   useEffect(() => { void load(); }, []);
   useEffect(() => { localStorage.setItem("figment-show-rejected", String(showRejected)); }, [showRejected]);
+  useEffect(() => { setProjectSave("idle"); }, [projectId]);
   async function load() {
     try {
       for (const endpoint of ["/api/studio", "./studio-data.json"]) {
@@ -87,6 +89,18 @@ export default function App() {
     }
   }
 
+  async function updateProjectStatus(project: StudioProject, status: ProjectStatus) {
+    if (data?.readOnly || status === project.metadata.status) return;
+    setProjectSave("saving");
+    try {
+      const response = await fetch("/api/project-status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId: project.metadata.id, status }) });
+      if (!response.ok) throw new Error("Could not save project status.");
+      const metadata = await response.json() as StudioProject["metadata"];
+      setData((current) => current && ({ ...current, projects: current.projects.map((candidate) => candidate.metadata.id === metadata.id ? { ...candidate, metadata } : candidate) }));
+      setProjectSave("saved");
+    } catch { setProjectSave("error"); }
+  }
+
   if (error) return <main className="state"><p className="eyebrow">Figment Studio</p><h1>Couldn’t open the lab.</h1><p>{error}</p></main>;
   if (!data) return <main className="state"><p className="eyebrow">Figment Studio</p><h1>Opening the lab…</h1></main>;
 
@@ -105,7 +119,7 @@ export default function App() {
       {groupYears(data.projects).map(([year, projects]) => <section className="year" key={year}>
         <p>{year}</p>
         {projects.map((project) => <button className={`project-row ${projectId === project.metadata.id ? "active" : ""}`} key={project.metadata.id} onClick={() => { setProjectId(project.metadata.id); setView("gallery"); }}>
-          <span>{project.metadata.title}</span><i className={`status ${project.metadata.status}`} />
+          <span>{project.metadata.title}</span><i className={`status ${project.metadata.status}`} title={`${friendlyStatus(project.metadata.status)} project`} />
         </button>)}
       </section>)}
       <ThemeControl value={theme} onChange={setTheme} />
@@ -114,7 +128,24 @@ export default function App() {
 
     <main className="workspace">
       <header className="topbar">
-        <div><p className="eyebrow">{activeProject ? `${activeProject.year} / ${activeProject.metadata.status}` : "Creative archive"}</p><h1>{activeProject?.metadata.title ?? "All work"}</h1></div>
+        <div>
+          <div className="project-context">
+            <p className="eyebrow">{activeProject ? activeProject.year : "Creative archive"}</p>
+            {activeProject && <>
+              <label className="project-status-control" title="Project status">
+                <i className={`status ${activeProject.metadata.status}`} aria-hidden="true" />
+                <select aria-label={`Status for ${activeProject.metadata.title}`} value={activeProject.metadata.status} disabled={data.readOnly || projectSave === "saving"} onChange={(event) => void updateProjectStatus(activeProject, event.target.value as ProjectStatus)}>
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="complete">Complete</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </label>
+              <span className={`project-save ${projectSave}`} role="status" aria-live="polite">{projectSave === "saving" ? "Saving…" : projectSave === "saved" ? "Saved" : projectSave === "error" ? "Couldn’t save" : ""}</span>
+            </>}
+          </div>
+          <h1>{activeProject?.metadata.title ?? "All work"}</h1>
+        </div>
         <nav>
           {data.readOnly && <span className="snapshot-badge" title="This published build cannot write back to project files">Published snapshot</span>}
           <button className={view === "gallery" ? "active" : ""} onClick={() => setView("gallery")}>Gallery</button>
@@ -254,6 +285,7 @@ function groupYears(projects: StudioProject[]): Array<[number, StudioProject[]]>
 }
 function friendlyModel(model: string) { return model.split("/").at(-1)?.replaceAll("-", " ") ?? model; }
 function friendlyCategory(category: string) { return category.replaceAll("-", " "); }
+function friendlyStatus(status: ProjectStatus) { return status.slice(0, 1).toUpperCase() + status.slice(1); }
 function dimensions(item: StudioGeneration["metadata"]) { return item.width && item.height ? `${item.width} × ${item.height}` : item.aspectRatio ?? item.resolution ?? "Unknown"; }
 function clearDirection(): ReviewPatch { return { favourite: false, signal: "unreviewed" }; }
 function timeAgo(value: string) { const seconds = Math.round((Date.now() - Date.parse(value)) / 1000); return seconds < 60 ? "just now" : `${Math.round(seconds / 60)}m ago`; }

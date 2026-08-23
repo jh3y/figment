@@ -57,6 +57,9 @@ button { color: inherit; }
 .year > p, .eyebrow { margin: 0 10px 8px; color: var(--muted); font-family: ui-monospace, monospace; font-size: 9px; text-transform: uppercase; letter-spacing: .12em; }
 .status { width: 6px; height: 6px; border: 1px solid currentColor; border-radius: 50%; opacity: .5; }
 .status.active { background: var(--accent); border-color: #788932; opacity: 1; }
+.status.paused { background: #d9a441; border-color: #98712c; opacity: 1; }
+.status.complete { background: var(--muted); border-color: var(--muted); opacity: .8; }
+.status.archived { opacity: .3; }
 .theme-control { margin-top: auto; display: flex; align-items: center; gap: 2px; padding: 0 7px; }
 .theme-control button { width: 27px; height: 27px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--muted); padding: 0; cursor: pointer; font-size: 14px; line-height: 1; }
 .theme-control button:hover { background: var(--hover); color: var(--ink); }
@@ -67,8 +70,15 @@ button { color: inherit; }
 .sidebar-note small { color: var(--muted); padding-left: 12px; }
 .workspace { min-width: 0; padding: 0 28px 60px; }
 .topbar { min-height: 102px; display: flex; align-items: end; justify-content: space-between; padding: 24px 3px 18px; border-bottom: 1px solid var(--line); }
-.topbar .eyebrow { margin-left: 0; }
+.topbar .eyebrow { margin: 0; }
 .topbar h1 { margin: 0; font: 500 34px/1 Georgia, serif; letter-spacing: -.035em; }
+.project-context { min-height: 21px; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.project-status-control { display: inline-flex; align-items: center; gap: 5px; border-left: 1px solid var(--line); padding-left: 8px; }
+.project-status-control select { appearance: auto; border: 0; background: transparent; padding: 0; color: var(--muted); cursor: pointer; font: 9px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .08em; }
+.project-status-control select:disabled { cursor: default; opacity: .65; }
+.project-status-control:focus-within { outline: 1px solid var(--ink); outline-offset: 2px; }
+.project-save { min-width: 48px; color: var(--muted); font: 8px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; }
+.project-save.error { color: #ad4b43; }
 .topbar nav { display: flex; gap: 2px; }
 .snapshot-badge { align-self: center; margin-right: 8px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); font: 8px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; }
 .topbar nav button, .document-tabs button { border: 0; border-bottom: 1px solid transparent; background: transparent; padding: 8px 11px; color: var(--muted); cursor: pointer; font-size: 11px; }

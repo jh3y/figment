@@ -8,6 +8,7 @@ import {
   type BatchManifest,
   type GenerationRecord,
   type ProjectMetadata,
+  type ProjectStatus,
   type ReviewMetadata,
 } from "../../core/src/index.ts";
 
@@ -148,6 +149,15 @@ export class ProjectRepository {
     await writeJson(resolved, record);
     await this.touchProjectForPath(resolved);
     return record;
+  }
+
+  async updateStatus(identifier: string, status: ProjectStatus): Promise<ProjectMetadata> {
+    if (!["active", "paused", "complete", "archived"].includes(status)) throw new Error(`Invalid project status: ${status}`);
+    const project = await this.find(identifier);
+    project.metadata.status = status;
+    project.metadata.modifiedAt = new Date().toISOString();
+    await writeJson(join(project.path, "project.json"), project.metadata);
+    return project.metadata;
   }
 
   async touch(project: ProjectHandle): Promise<void> {

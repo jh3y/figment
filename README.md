@@ -53,7 +53,7 @@ pnpm lab projects
 pnpm studio
 ```
 
-Studio opens at `http://127.0.0.1:4173`. It provides project browsing, briefs, decisions, references, a filtered gallery, image lightbox, provenance, and review controls. Reviews are atomically written back to generation JSON, with visible saving, saved, or failed feedback in the lightbox. The interface supports system, light, and dark themes; the preference stays local to the browser.
+Studio opens at `http://127.0.0.1:4173`. It provides project browsing, briefs, decisions, references, a filtered gallery, image lightbox, provenance, and review controls. Reviews are atomically written back to generation JSON, and project status can be changed between active, paused, complete, and archived without editing files by hand. Both actions provide visible saving, saved, or failed feedback. The interface supports system, light, and dark themes; the preference stays local to the browser.
 
 The repository starts with an empty `projects/` directory. Studio branding lives independently under `apps/studio/public/`, so it does not add example project state to a new clone.
 

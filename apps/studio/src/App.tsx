@@ -7,20 +7,23 @@ type View = "gallery" | "brief" | "references" | "prototypes";
 type ThemePreference = "system" | "light" | "dark";
 type ReviewPatch = Partial<ReviewMetadata>;
 type ReviewSaveState = "idle" | "saving" | "saved" | "error";
+interface StudioPreferences { projectId: string; view: View; model: string; category: string; batch: string; review: string; tag: string; showRejected: boolean }
+const STUDIO_PREFERENCES_KEY = "figment-studio-preferences-v1";
 
 export default function App() {
+  const preferences = useMemo(readStudioPreferences, []);
   const [data, setData] = useState<StudioData>();
   const [error, setError] = useState<string>();
-  const [projectId, setProjectId] = useState("all");
-  const [view, setView] = useState<View>("gallery");
+  const [projectId, setProjectId] = useState(preferences.projectId ?? "all");
+  const [view, setView] = useState<View>(preferences.view ?? "gallery");
   const [selected, setSelected] = useState<number>();
   const [lightboxItems, setLightboxItems] = useState<StudioGeneration[]>([]);
-  const [model, setModel] = useState("all");
-  const [category, setCategory] = useState("all");
-  const [batch, setBatch] = useState("all");
-  const [review, setReview] = useState("all");
-  const [tag, setTag] = useState("all");
-  const [showRejected, setShowRejected] = useState(() => localStorage.getItem("figment-show-rejected") === "true");
+  const [model, setModel] = useState(preferences.model ?? "all");
+  const [category, setCategory] = useState(preferences.category ?? "all");
+  const [batch, setBatch] = useState(preferences.batch ?? "all");
+  const [review, setReview] = useState(preferences.review ?? "all");
+  const [tag, setTag] = useState(preferences.tag ?? "all");
+  const [showRejected, setShowRejected] = useState(preferences.showRejected ?? localStorage.getItem("figment-show-rejected") === "true");
   const [reviewSaves, setReviewSaves] = useState<Record<string, ReviewSaveState>>({});
   const [projectSave, setProjectSave] = useState<ReviewSaveState>("idle");
   const [theme, setTheme] = useState<ThemePreference>(() => {
@@ -42,7 +45,14 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => { void load(); }, []);
-  useEffect(() => { localStorage.setItem("figment-show-rejected", String(showRejected)); }, [showRejected]);
+  useEffect(() => {
+    localStorage.setItem(STUDIO_PREFERENCES_KEY, JSON.stringify({ projectId, view, model, category, batch, review, tag, showRejected } satisfies StudioPreferences));
+  }, [projectId, view, model, category, batch, review, tag, showRejected]);
+  useEffect(() => {
+    if (!data) return;
+    if (projectId === "all") { if (view !== "gallery") setView("gallery"); return; }
+    if (!data.projects.some((project) => project.metadata.id === projectId)) { setProjectId("all"); setView("gallery"); }
+  }, [data, projectId, view]);
   useEffect(() => { setProjectSave("idle"); }, [projectId]);
   async function load() {
     try {
@@ -289,3 +299,11 @@ function friendlyStatus(status: ProjectStatus) { return status.slice(0, 1).toUpp
 function dimensions(item: StudioGeneration["metadata"]) { return item.width && item.height ? `${item.width} × ${item.height}` : item.aspectRatio ?? item.resolution ?? "Unknown"; }
 function clearDirection(): ReviewPatch { return { favourite: false, signal: "unreviewed" }; }
 function timeAgo(value: string) { const seconds = Math.round((Date.now() - Date.parse(value)) / 1000); return seconds < 60 ? "just now" : `${Math.round(seconds / 60)}m ago`; }
+function readStudioPreferences(): Partial<StudioPreferences> {
+  try {
+    const value = JSON.parse(localStorage.getItem(STUDIO_PREFERENCES_KEY) ?? "{}") as Record<string, unknown>;
+    const view = ["gallery", "brief", "references", "prototypes"].includes(String(value.view)) ? value.view as View : undefined;
+    const text = (key: string) => typeof value[key] === "string" ? value[key] as string : undefined;
+    return { projectId: text("projectId"), view, model: text("model"), category: text("category"), batch: text("batch"), review: text("review"), tag: text("tag"), showRejected: typeof value.showRejected === "boolean" ? value.showRejected : undefined };
+  } catch { return {}; }
+}

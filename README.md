@@ -82,7 +82,7 @@ projects/2026/goob/
 
 Prototype folders appear in Studio with the rest of the project. A static prototype with an `index.html` can be previewed and opened immediately. Framework-based experiments remain independent: add a small `prototype.json` containing their localhost `url` and Studio will link to or embed the running prototype. See [`skills/prototype/SKILL.md`](skills/prototype/SKILL.md) for the optional manifest.
 
-Studio watches the project tree while it is running, so new generations, references, prototypes, and agent edits appear after an automatic reload. Review writes are excluded from that reload loop so keyboard grading remains uninterrupted.
+Studio watches the project tree while it is running, so new generations, references, prototypes, and agent edits appear after an automatic reload. The active project, section, gallery filters, and rejected visibility are restored after reloads; review writes are excluded from the reload loop so keyboard grading remains uninterrupted.
 
 ### Publish a gallery snapshot
 

@@ -14,6 +14,7 @@ export default function App() {
   const [projectId, setProjectId] = useState("all");
   const [view, setView] = useState<View>("gallery");
   const [selected, setSelected] = useState<number>();
+  const [lightboxItems, setLightboxItems] = useState<StudioGeneration[]>([]);
   const [model, setModel] = useState("all");
   const [category, setCategory] = useState("all");
   const [batch, setBatch] = useState("all");
@@ -79,6 +80,7 @@ export default function App() {
       if (!response.ok) throw new Error("Could not save review.");
       const metadata = await response.json() as StudioGeneration["metadata"];
       setData((current) => current && ({ ...current, generations: current.generations.map((candidate) => candidate.metadataPath === item.metadataPath ? { ...candidate, metadata } : candidate) }));
+      setLightboxItems((current) => current.map((candidate) => candidate.metadataPath === item.metadataPath ? { ...candidate, metadata } : candidate));
       setReviewSaves((current) => ({ ...current, [item.metadataPath]: "saved" }));
     } catch {
       setReviewSaves((current) => ({ ...current, [item.metadataPath]: "error" }));
@@ -132,7 +134,7 @@ export default function App() {
           <button className={`rejected-toggle ${showRejected ? "active" : ""}`} type="button" aria-pressed={showRejected} onClick={() => setShowRejected((current) => !current)}>{showRejected ? "Hide rejected" : "Show rejected"}</button>
           <span className="count">{visible.length} {visible.length === 1 ? "output" : "outputs"}</span>
         </div>
-        {visible.length ? <div className="gallery">{visible.map((item, index) => <GalleryCard item={item} key={`${item.metadataPath}-${item.outputIndex}`} onOpen={() => setSelected(index)} onReview={(patch) => void patchReview(item, patch)} />)}</div>
+        {visible.length ? <div className="gallery">{visible.map((item, index) => <GalleryCard item={item} key={`${item.metadataPath}-${item.outputIndex}`} onOpen={() => { setLightboxItems(visible); setSelected(index); }} onReview={(patch) => void patchReview(item, patch)} />)}</div>
           : <Empty hasProjects={data.projects.length > 0} />}
       </>}
 
@@ -140,7 +142,7 @@ export default function App() {
       {activeProject && view === "references" && <References project={activeProject} />}
       {activeProject && view === "prototypes" && <Prototypes project={activeProject} />}
     </main>
-    {selected !== undefined && visible[selected] && <Lightbox item={visible[selected]} position={selected} total={visible.length} saveState={reviewSaves[visible[selected]!.metadataPath] ?? "idle"} onClose={() => setSelected(undefined)} onMove={(step) => setSelected((selected + step + visible.length) % visible.length)} onReview={(patch) => void patchReview(visible[selected]!, patch)} />}
+    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} />}
   </div>;
 }
 

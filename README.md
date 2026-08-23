@@ -6,6 +6,20 @@ The filesystem is the product memory. Projects are readable Markdown, JSON, and 
 
 > **Early alpha:** Figment is usable today, but its interfaces and project schemas may still evolve. Image generation is the supported media workflow; Studio is local-first, and published gallery builds are read-only. Keep valuable work in Git or another backup and inspect generated static builds before publishing them.
 
+## Why Figment?
+
+Figment does not replace [Krea MCP](https://www.krea.ai/mcp), the [Krea API](https://www.krea.ai/features/api), or [Krea Skills](https://www.krea.ai/skills). They are excellent ways to execute creative work:
+
+- use **Krea MCP** to give a compatible agent direct access to Krea from a conversation
+- use the **Krea API or SDK** when integrating generation into software or an automated pipeline
+- use **Krea Skills** when an agent needs ready-made commands for generating, enhancing, training, or running multi-step Krea workflows
+
+Figment sits around those execution surfaces as a clonable pre-production studio. It gives a human and agent durable project context: the brief, decisions, references, live model research, costs, focused probes, controlled batches, provenance, review, lineage, and prototypes. Studio closes the loop by making the filesystem visual and giving the human a calm place to compare and direct the work.
+
+The agent is more than a prompt courier. It acts as an embedded creative partner and producer: asking what the work is for, challenging vague direction, researching the right current models, proposing the cheapest useful experiment, and turning human feedback into a reasoned next step. The human retains taste and final judgement; Krea provides the generation capabilities; Figment keeps the collaboration coherent, inspectable, and portable.
+
+In short: use Krea directly when the task is already understood and you want an output. Use Figment when the direction itself needs to be developed, tested, remembered, and taken further over time.
+
 ## First five minutes
 
 Requirements: Node.js 20+ and pnpm 10+.

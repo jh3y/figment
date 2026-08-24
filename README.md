@@ -52,7 +52,10 @@ Ask your coding agent: **“Start a new project.”** The agent should behave li
 
 The human should not need to know Figment's workflow commands or prompt the agent through every stage. The agent should actively:
 
-- ask the high-leverage questions needed to understand the goal, audience, deliverable, timing, constraints, and budget where relevant
+- clarify whether the outcome is exploration, a decision artifact, a final asset, a reusable system, or production-ready delivery—and ask about format, quantity, channel, timing, constraints, and budget where relevant
+- ask for references, earlier attempts, competitors, and anti-references; establish what matters about each rather than treating a reference as an instruction to imitate it
+- distinguish generation spend from wider production resources, while accepting “unknown” or open low-cost exploration when appropriate
+- identify how the work could eventually be tested in context and suggest the cheapest useful prototype without prematurely fixing the creative direction
 - research and recommend the best current models for the brief before generating
 - explain what should be tested next and why
 - propose the cheapest useful probe before committing to a substantial batch

@@ -232,5 +232,5 @@ async function walk(root: string, include: (path: string) => boolean): Promise<s
 }
 
 function initialBrief(title: string): string {
-  return `# ${title}\n\n> This brief is intentionally incomplete. Record only what the human has provided; label hypotheses and open ideas clearly.\n\n## Objective\n\n## Concept\n\n## Audience / context\n\n## Creative principles\n\n## Desired feeling\n\n## Visual direction\n\n## Constraints\n\n## Anti-goals\n\n## References\n\n## Open questions\n\n## Current hypotheses\n\n## Success criteria\n`;
+  return `# ${title}\n\n> This brief is intentionally incomplete. Record only what the human has provided; label hypotheses and open ideas clearly.\n\n## Objective\n\n## Concept\n\n## Audience / context\n\n## Deliverables / applications\n\n## Creative principles\n\n## Desired feeling\n\n## Visual direction\n\n## Constraints\n\n## Resources / timing\n\n## Anti-goals\n\n## References\n\n## Prototype / contextual tests\n\n## Open questions\n\n## Current hypotheses\n\n## Success criteria\n`;
 }

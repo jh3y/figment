@@ -21,6 +21,8 @@ describe("ProjectRepository", () => {
     expect(project.year).toBe(2027);
     expect(project.path).toContain("/2027/goob");
     expect(await readdir(project.path)).toEqual(expect.arrayContaining(["brief.md", "decisions.md", "project.json", "references", "probes", "generations", "prototypes", "notes"]));
+    expect(await repository.readMarkdown(project, "brief.md")).toContain("## Deliverables / applications");
+    expect(await repository.readMarkdown(project, "brief.md")).toContain("## Prototype / contextual tests");
     expect((await repository.list())[0]?.metadata.createdAt).toBe("2027-01-02T10:00:00.000Z");
     const updated = await repository.updateStatus(project.metadata.id, "paused");
     expect(updated.status).toBe("paused");

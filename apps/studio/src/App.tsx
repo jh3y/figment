@@ -7,20 +7,23 @@ type View = "gallery" | "brief" | "references" | "prototypes";
 type ThemePreference = "system" | "light" | "dark";
 type ReviewPatch = Partial<ReviewMetadata>;
 type ReviewSaveState = "idle" | "saving" | "saved" | "error";
+interface StudioPreferences { projectId: string; view: View; model: string; category: string; batch: string; review: string; tag: string; showRejected: boolean }
+const STUDIO_PREFERENCES_KEY = "figment-studio-preferences-v1";
 
 export default function App() {
+  const preferences = useMemo(readStudioPreferences, []);
   const [data, setData] = useState<StudioData>();
   const [error, setError] = useState<string>();
-  const [projectId, setProjectId] = useState("all");
-  const [view, setView] = useState<View>("gallery");
+  const [projectId, setProjectId] = useState(preferences.projectId ?? "all");
+  const [view, setView] = useState<View>(preferences.view ?? "gallery");
   const [selected, setSelected] = useState<number>();
   const [lightboxItems, setLightboxItems] = useState<StudioGeneration[]>([]);
-  const [model, setModel] = useState("all");
-  const [category, setCategory] = useState("all");
-  const [batch, setBatch] = useState("all");
-  const [review, setReview] = useState("all");
-  const [tag, setTag] = useState("all");
-  const [showRejected, setShowRejected] = useState(() => localStorage.getItem("figment-show-rejected") === "true");
+  const [model, setModel] = useState(preferences.model ?? "all");
+  const [category, setCategory] = useState(preferences.category ?? "all");
+  const [batch, setBatch] = useState(preferences.batch ?? "all");
+  const [review, setReview] = useState(preferences.review ?? "all");
+  const [tag, setTag] = useState(preferences.tag ?? "all");
+  const [showRejected, setShowRejected] = useState(preferences.showRejected ?? localStorage.getItem("figment-show-rejected") === "true");
   const [reviewSaves, setReviewSaves] = useState<Record<string, ReviewSaveState>>({});
   const [projectSave, setProjectSave] = useState<ReviewSaveState>("idle");
   const [theme, setTheme] = useState<ThemePreference>(() => {
@@ -42,7 +45,14 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => { void load(); }, []);
-  useEffect(() => { localStorage.setItem("figment-show-rejected", String(showRejected)); }, [showRejected]);
+  useEffect(() => {
+    localStorage.setItem(STUDIO_PREFERENCES_KEY, JSON.stringify({ projectId, view, model, category, batch, review, tag, showRejected } satisfies StudioPreferences));
+  }, [projectId, view, model, category, batch, review, tag, showRejected]);
+  useEffect(() => {
+    if (!data) return;
+    if (projectId === "all") { if (view !== "gallery") setView("gallery"); return; }
+    if (!data.projects.some((project) => project.metadata.id === projectId)) { setProjectId("all"); setView("gallery"); }
+  }, [data, projectId, view]);
   useEffect(() => { setProjectSave("idle"); }, [projectId]);
   async function load() {
     try {
@@ -99,6 +109,13 @@ export default function App() {
       setData((current) => current && ({ ...current, projects: current.projects.map((candidate) => candidate.metadata.id === metadata.id ? { ...candidate, metadata } : candidate) }));
       setProjectSave("saved");
     } catch { setProjectSave("error"); }
+  }
+
+  function openGeneration(target: StudioGeneration) {
+    const sequence = data?.generations.filter((candidate) => candidate.projectId === target.projectId) ?? [target];
+    const index = sequence.findIndex((candidate) => candidate.metadataPath === target.metadataPath && candidate.outputFile === target.outputFile);
+    setLightboxItems(sequence);
+    setSelected(index < 0 ? 0 : index);
   }
 
   if (error) return <main className="state"><p className="eyebrow">Figment Studio</p><h1>Couldn’t open the lab.</h1><p>{error}</p></main>;
@@ -173,7 +190,7 @@ export default function App() {
       {activeProject && view === "references" && <References project={activeProject} />}
       {activeProject && view === "prototypes" && <Prototypes project={activeProject} />}
     </main>
-    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} />}
+    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} project={data.projects.find((project) => project.metadata.id === lightboxItems[selected]!.projectId)} generations={data.generations} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} onOpenGeneration={openGeneration} />}
   </div>;
 }
 
@@ -184,7 +201,7 @@ function GalleryCard({ item, onOpen, onReview }: { item: StudioGeneration; onOpe
   </article>;
 }
 
-function Lightbox({ item, position, total, saveState, onClose, onMove, onReview }: { item: StudioGeneration; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void }) {
+function Lightbox({ item, project, generations, position, total, saveState, onClose, onMove, onReview, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onOpenGeneration: (item: StudioGeneration) => void }) {
   const [note, setNote] = useState(item.metadata.review.note ?? "");
   const [tags, setTags] = useState(item.metadata.review.tags.join(", "));
   useEffect(() => {
@@ -227,11 +244,28 @@ function Lightbox({ item, position, total, saveState, onClose, onMove, onReview 
       <div className="facts"><Fact label="Model" value={item.metadata.model} /><Fact label="Cost" value={cost ? `${cost.kind === "estimate" ? "~" : ""}$${cost.amount.toFixed(3)}` : "Unknown"} /><Fact label="Created" value={new Date(item.metadata.createdAt).toLocaleString()} /><Fact label="Dimensions" value={dimensions(item.metadata)} /></div>
       <Detail label="Review note"><textarea value={note} placeholder="What works? What needs to change?" onChange={(event) => setNote(event.target.value)} onBlur={() => onReview({ note })} /></Detail>
       <Detail label="Tags"><input value={tags} placeholder="expressive, face, warm" onChange={(event) => setTags(event.target.value)} onBlur={() => onReview({ tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean) })} /></Detail>
-      {item.metadata.references.length > 0 && <Detail label="References">{item.metadata.references.map((reference) => <code key={reference.localPath}>{reference.localPath}</code>)}</Detail>}
+      {item.metadata.references.length > 0 && <GenerationReferences item={item} project={project} generations={generations} onOpenGeneration={onOpenGeneration} />}
       {item.metadata.parentGenerationId && <Detail label="Lineage"><p>Derived from {item.metadata.parentGenerationId}</p></Detail>}
-      <details><summary>Parameters & provenance</summary><pre>{JSON.stringify({ batch: item.batchName, jobId: item.metadata.jobId, parameters: item.metadata.parameters, provider: item.metadata.provider }, null, 2)}</pre></details>
+      <details><summary>Parameters & provenance</summary><pre>{JSON.stringify({ batch: item.batchName, jobId: item.metadata.jobId, parameters: item.metadata.parameters, references: item.metadata.references, provider: item.metadata.provider }, null, 2)}</pre></details>
     </aside>
   </div>;
+}
+
+function GenerationReferences({ item, project, generations, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; onOpenGeneration: (item: StudioGeneration) => void }) {
+  return <Detail label="References"><div className="generation-references">{item.metadata.references.map((reference) => {
+    const source = reference.source;
+    const target = source && generations.find((candidate) => candidate.projectId === source.projectId
+      && normalPath(candidate.metadataPath).endsWith(`/${normalPath(source.metadataPath)}`)
+      && candidate.outputFile === source.outputFile);
+    const libraryReference = project?.references.find((candidate) => normalPath(candidate.path).endsWith(`/${normalPath(reference.localPath)}`));
+    const imageUrl = target?.imageUrl ?? libraryReference?.url;
+    const label = source ? `Shot #${source.shotNumber}` : fileName(reference.localPath);
+    const caption = source ? "Source generation" : "Reference file";
+    const content = <>{imageUrl ? <img src={imageUrl} alt={label} /> : <span className="reference-placeholder" aria-hidden="true">◫</span>}<span><strong>{label}</strong><small>{caption}</small></span></>;
+    return target
+      ? <button type="button" className="generation-reference" key={`${reference.localPath}-${source?.shotNumber ?? "file"}`} onClick={() => onOpenGeneration(target)} title={`Open ${label}`}>{content}</button>
+      : <div className="generation-reference" key={`${reference.localPath}-${source?.shotNumber ?? "file"}`}>{content}</div>;
+  })}</div></Detail>;
 }
 
 function DocumentView({ project }: { project: StudioProject }) {
@@ -289,3 +323,13 @@ function friendlyStatus(status: ProjectStatus) { return status.slice(0, 1).toUpp
 function dimensions(item: StudioGeneration["metadata"]) { return item.width && item.height ? `${item.width} × ${item.height}` : item.aspectRatio ?? item.resolution ?? "Unknown"; }
 function clearDirection(): ReviewPatch { return { favourite: false, signal: "unreviewed" }; }
 function timeAgo(value: string) { const seconds = Math.round((Date.now() - Date.parse(value)) / 1000); return seconds < 60 ? "just now" : `${Math.round(seconds / 60)}m ago`; }
+function normalPath(value: string) { return value.replaceAll("\\", "/"); }
+function fileName(value: string) { return normalPath(value).split("/").at(-1) ?? value; }
+function readStudioPreferences(): Partial<StudioPreferences> {
+  try {
+    const value = JSON.parse(localStorage.getItem(STUDIO_PREFERENCES_KEY) ?? "{}") as Record<string, unknown>;
+    const view = ["gallery", "brief", "references", "prototypes"].includes(String(value.view)) ? value.view as View : undefined;
+    const text = (key: string) => typeof value[key] === "string" ? value[key] as string : undefined;
+    return { projectId: text("projectId"), view, model: text("model"), category: text("category"), batch: text("batch"), review: text("review"), tag: text("tag"), showRejected: typeof value.showRejected === "boolean" ? value.showRejected : undefined };
+  } catch { return {}; }
+}

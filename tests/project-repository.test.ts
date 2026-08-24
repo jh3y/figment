@@ -46,6 +46,10 @@ describe("ProjectRepository", () => {
 
     const [handle] = await repository.generations(project);
     expect(handle?.metadata.prompt).toBe("A face");
+    const numbers = await repository.shotNumbers(project);
+    expect(numbers.get(handle!.metadataPath)).toBe(1);
+    expect((await repository.generationByShot(project, 1)).metadataPath).toBe(handle!.metadataPath);
+    await expect(repository.generationByShot(project, 24)).rejects.toThrow("Unknown shot #24");
     const reviewed = await repository.updateReview(handle!.metadataPath, { favourite: true, signal: "shortlist", tags: ["eyes"] });
     expect(reviewed.review).toMatchObject({ favourite: true, signal: "shortlist", tags: ["eyes"] });
     expect((await readdir(batchPath)).some((name) => name.endsWith(".tmp"))).toBe(false);

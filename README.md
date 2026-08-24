@@ -6,6 +6,20 @@ The filesystem is the product memory. Projects are readable Markdown, JSON, and 
 
 > **Early alpha:** Figment is usable today, but its interfaces and project schemas may still evolve. Image generation is the supported media workflow; Studio is local-first, and published gallery builds are read-only. Keep valuable work in Git or another backup and inspect generated static builds before publishing them.
 
+## Why Figment?
+
+Figment does not replace [Krea MCP](https://www.krea.ai/mcp), the [Krea API](https://www.krea.ai/features/api), or [Krea Skills](https://www.krea.ai/skills). They are excellent ways to execute creative work:
+
+- use **Krea MCP** to give a compatible agent direct access to Krea from a conversation
+- use the **Krea API or SDK** when integrating generation into software or an automated pipeline
+- use **Krea Skills** when an agent needs ready-made commands for generating, enhancing, training, or running multi-step Krea workflows
+
+Figment sits around those execution surfaces as a clonable pre-production studio. It gives a human and agent durable project context: the brief, decisions, references, live model research, costs, focused probes, controlled batches, provenance, review, lineage, and prototypes. Studio closes the loop by making the filesystem visual and giving the human a calm place to compare and direct the work.
+
+The agent is more than a prompt courier. It acts as an embedded creative partner and producer: asking what the work is for, challenging vague direction, researching the right current models, proposing the cheapest useful experiment, and turning human feedback into a reasoned next step. The human retains taste and final judgement; Krea provides the generation capabilities; Figment keeps the collaboration coherent, inspectable, and portable.
+
+In short: use Krea directly when the task is already understood and you want an output. Use Figment when the direction itself needs to be developed, tested, remembered, and taken further over time.
+
 ## First five minutes
 
 Requirements: Node.js 20+ and pnpm 10+.
@@ -82,7 +96,7 @@ projects/2026/goob/
 
 Prototype folders appear in Studio with the rest of the project. A static prototype with an `index.html` can be previewed and opened immediately. Framework-based experiments remain independent: add a small `prototype.json` containing their localhost `url` and Studio will link to or embed the running prototype. See [`skills/prototype/SKILL.md`](skills/prototype/SKILL.md) for the optional manifest.
 
-Studio watches the project tree while it is running, so new generations, references, prototypes, and agent edits appear after an automatic reload. Review writes are excluded from that reload loop so keyboard grading remains uninterrupted.
+Studio watches the project tree while it is running, so new generations, references, prototypes, and agent edits appear after an automatic reload. The active project, section, gallery filters, and rejected visibility are restored after reloads; review writes are excluded from the reload loop so keyboard grading remains uninterrupted.
 
 ### Publish a gallery snapshot
 
@@ -127,6 +141,18 @@ pnpm lab probe goob \
 ```
 
 To use a local reference, keep it inside the project's `references/` directory, inspect the live schema, then add `--reference <path> --reference-field <exact-schema-field>`. For object-shaped reference arrays, add `--reference-array --reference-template '{"url":"$url"}'` and any model-supported fields. Figment uploads a Krea asset and stores the mapping in `references/.krea-assets.json` without changing the source file.
+
+Existing outputs can be referenced by the stable number shown in Studio:
+
+```bash
+pnpm lab probe goob \
+  --model <model-id> \
+  --prompt "preserve the character while exploring a calmer seated pose" \
+  --reference-shot 24 \
+  --reference-field <exact-schema-field>
+```
+
+Figment resolves `#24` to its local output, uploads that image, and records the source generation, batch, file, and shot number. The image remains a structured model input rather than being silently appended to the textual prompt. In Studio, references appear as thumbnails in the lightbox; source generations are labelled with their shot number and open when clicked.
 
 Use `pnpm lab generate` for a controlled batch. Pass a recently researched `--cost-per-image` when Krea's live catalogue omits price metadata. Larger or estimated-over-$1 batches require `--yes` after the cost preflight. If a process is interrupted, run `pnpm lab reconcile <project>` before considering a retry.
 

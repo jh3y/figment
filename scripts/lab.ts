@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { compactId, safeSlug, writeJson, type BatchManifest, type CostRecord, type GenerationRecord, type ReferenceRecord } from "@figment/core";
 import { KreaAdapter, ModelCatalog, type KreaJob } from "@figment/krea";
@@ -246,24 +246,43 @@ async function finishGeneration(client: KreaAdapter, batchPath: string, record: 
 }
 
 async function prepareReferences(project: ProjectHandle): Promise<ReferenceRecord[]> {
-  const paths = values("reference").map((path) => resolve(path));
-  if (!paths.length) return [];
+  const inputs: Array<{ path: string; source?: NonNullable<ReferenceRecord["source"]> }> = values("reference").map((path) => ({ path: resolve(path) }));
+  for (const value of values("reference-shot")) {
+    const shotNumber = Number(value);
+    if (!Number.isInteger(shotNumber) || shotNumber < 1) throw new Error(`--reference-shot must be a positive integer: ${value}`);
+    const handle = await repository.generationByShot(project, shotNumber);
+    const outputFile = handle.metadata.outputFiles[0]!;
+    inputs.push({
+      path: resolve(handle.batchPath, outputFile),
+      source: {
+        projectId: project.metadata.id,
+        generationId: handle.metadata.id,
+        batchId: handle.metadata.batchId,
+        metadataPath: relative(project.path, handle.metadataPath),
+        outputFile,
+        shotNumber,
+      },
+    });
+  }
+  if (!inputs.length) return [];
   const projectRoot = resolve(project.path);
-  for (const path of paths) if (path !== projectRoot && !path.startsWith(`${projectRoot}/`)) throw new Error(`Reference must be inside ${relative(process.cwd(), projectRoot)}: ${path}`);
+  for (const { path } of inputs) if (path !== projectRoot && !path.startsWith(`${projectRoot}${sep}`)) throw new Error(`Reference must be inside ${relative(process.cwd(), projectRoot)}: ${path}`);
   const mapPath = join(project.path, "references", ".krea-assets.json");
   let mappings: Record<string, ReferenceRecord> = {};
   try { mappings = JSON.parse(await readFile(mapPath, "utf8")); } catch { /* No uploads yet. */ }
   const client = new KreaAdapter();
   const records: ReferenceRecord[] = [];
-  for (const path of paths) {
+  const uniqueInputs = new Map(inputs.map((input) => [input.path, input]));
+  for (const { path, source } of uniqueInputs.values()) {
     const localPath = relative(project.path, path);
     let record = mappings[localPath];
     if (!record?.assetUrl || booleanArg("refresh-reference")) {
       const asset = await client.upload(path, `Figment reference: ${project.metadata.slug}/${basename(path)}`);
       record = { localPath, assetId: asset.id, assetUrl: asset.url, uploadedAt: asset.uploadedAt ?? new Date().toISOString() };
-      mappings[localPath] = record;
-      await writeJson(mapPath, mappings);
     }
+    if (source) record = { ...record, source };
+    mappings[localPath] = record;
+    await writeJson(mapPath, mappings);
     records.push(record);
   }
   return records;
@@ -384,5 +403,5 @@ function replaceUrlTemplate(value: unknown, url: string): unknown {
 }
 
 function help(): void {
-  process.stdout.write(`Figment creative lab\n\nCommands:\n  pnpm lab new --title <title> [--description ...] [--json]\n  pnpm lab projects [--json]\n  pnpm lab models [--refresh] [--json]\n  pnpm lab models --schema <model> [--json]\n  pnpm lab probe <project> --model <id> --prompt <text> [--category concepts] [--reference <path> --reference-field <field>]\n  pnpm lab generate <project> --model <id> --prompt <text> [--category concepts] [--count 4] [--yes]\n  pnpm lab review --file <generation.json> [--favourite true] [--signal shortlist|reject|unreviewed]\n  pnpm lab reconcile <project>\n  pnpm lab touch <project>\n  pnpm studio\n`);
+  process.stdout.write(`Figment creative lab\n\nCommands:\n  pnpm lab new --title <title> [--description ...] [--json]\n  pnpm lab projects [--json]\n  pnpm lab models [--refresh] [--json]\n  pnpm lab models --schema <model> [--json]\n  pnpm lab probe <project> --model <id> --prompt <text> [--category concepts] [--reference <path> | --reference-shot <number>] --reference-field <field>\n  pnpm lab generate <project> --model <id> --prompt <text> [--category concepts] [--reference-shot <number>] [--count 4] [--yes]\n  pnpm lab review --file <generation.json> [--favourite true] [--signal shortlist|reject|unreviewed]\n  pnpm lab reconcile <project>\n  pnpm lab touch <project>\n  pnpm studio\n`);
 }

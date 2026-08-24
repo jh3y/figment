@@ -16,6 +16,6 @@ pnpm lab probe <project> --model <id> --prompt <prompt> --count <n> \
   --category <category> --purpose <purpose> --hypothesis <question> --params '<json>'
 ```
 
-Add `--reference <path> --reference-field <schema-field>` only when needed. The path must remain inside the project's `references/` directory. If the schema expects reference objects, add `--reference-array --reference-template '{"url":"$url"}'` with any schema-supported strength fields. Use `--cost-per-image <usd>` when current official pricing is known but the live catalogue does not expose it.
+Add `--reference <path> --reference-field <schema-field>` for an ordinary file in the project's `references/` directory. When the human names an existing Studio output, use `--reference-shot <number> --reference-field <schema-field>` so the CLI resolves the real local asset and preserves its source identity; do not copy the output or substitute its shot number into the prompt. If the schema expects reference objects, add `--reference-array --reference-template '{"url":"$url"}'` with any schema-supported strength fields. Use `--cost-per-image <usd>` when current official pricing is known but the live catalogue does not expose it.
 
 After completion, inspect the local outputs, summarize evidence rather than taste alone, and add the conclusion to the probe manifest. Log a decision only if the human actually commits to a direction. If interrupted, run `pnpm lab reconcile <project>`; do not resubmit blindly.

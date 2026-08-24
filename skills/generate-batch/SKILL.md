@@ -20,6 +20,8 @@ pnpm lab generate <project> --model <id> --prompt <prompt> --count <n> \
   --category <category> --purpose <purpose> --variable <variable> --params '<json>' --yes
 ```
 
-Use `--parent <generation-id>` for derivations. For references, add `--reference` and the live schema's `--reference-field`; use `--reference-template` when the schema expects objects, and never alter originals. Pass `--cost-per-image <usd>` when official current pricing was researched but is absent from live catalogue metadata.
+When the human identifies an existing output by its Studio number—“use #24,” for example—pass `--reference-shot 24` with the live schema's `--reference-field`. The CLI resolves the stable project-local number, uploads the actual local output, and records the source generation and shot number; do not copy it into `references/` or merely mention it in the prompt. Add `--parent <generation-id>` as well only when the new work is genuinely a derivation rather than simply informed by that image.
+
+For ordinary project reference files, add `--reference <path>` and `--reference-field <schema-field>`; use `--reference-template` when the schema expects objects, and never alter originals. Reference images are structured model inputs and should remain separate from the textual prompt in provenance. Pass `--cost-per-image <usd>` when official current pricing was researched but is absent from live catalogue metadata.
 
 The CLI writes the manifest and pending generation record before waiting, downloads successful outputs locally, and only then marks completion. On process or network interruption, run `pnpm lab reconcile <project>`. Never create replacement jobs until reconciliation shows the original failed or cancelled.

@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { writeJson, type ProjectStatus } from "../../packages/core/src/index.ts";
-import { ProjectRepository, type GenerationHandle } from "../../packages/project/src/repository.ts";
+import type { ProjectStatus } from "../../packages/core/src/index.ts";
+import { ProjectRepository } from "../../packages/project/src/repository.ts";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const projectsRoot = resolve(process.env.FIGMENT_PROJECTS_DIR ?? join(repositoryRoot, "projects"));
@@ -88,7 +88,7 @@ async function studioData() {
     prototypes: await prototypeDescriptors(project.path, project.year, project.metadata.slug),
   })));
   const handles = await repository.generations();
-  const numbers = await ensureShotNumbers(handles);
+  const numbers = await repository.shotNumbers();
   const generations = handles.flatMap((handle) => handle.metadata.outputFiles.map((outputFile, outputIndex) => ({
     projectId: handle.project.metadata.id,
     projectSlug: handle.project.metadata.slug,
@@ -105,34 +105,6 @@ async function studioData() {
     imageUrl: fileUrl(join(handle.batchPath, outputFile)),
   })));
   return { scannedAt: new Date().toISOString(), projects: projectData, generations };
-}
-
-interface ShotIndex { schemaVersion: 1; nextNumber: number; shots: Record<string, number> }
-
-async function ensureShotNumbers(handles: GenerationHandle[]): Promise<Map<string, number>> {
-  const result = new Map<string, number>();
-  const byProject = new Map<string, GenerationHandle[]>();
-  for (const handle of handles.filter((candidate) => candidate.metadata.outputFiles.length > 0)) byProject.set(handle.project.path, [...(byProject.get(handle.project.path) ?? []), handle]);
-  for (const [projectPath, projectHandles] of byProject) {
-    const indexPath = join(projectPath, "shot-index.json");
-    let index: ShotIndex | undefined;
-    try { index = JSON.parse(await readFile(indexPath, "utf8")) as ShotIndex; } catch { /* Created below. */ }
-    const valid = index?.schemaVersion === 1 && index.shots && typeof index.shots === "object";
-    const next: ShotIndex = valid ? index! : { schemaVersion: 1, nextNumber: 1, shots: {} };
-    let changed = !valid;
-    const missing = projectHandles.filter((handle) => next.shots[relative(projectPath, handle.metadataPath)] === undefined);
-    if (!valid) {
-      for (const handle of missing) next.shots[relative(projectPath, handle.metadataPath)] = next.nextNumber++;
-    } else {
-      for (const handle of missing.sort((a, b) => a.metadata.createdAt.localeCompare(b.metadata.createdAt))) {
-        next.shots[relative(projectPath, handle.metadataPath)] = next.nextNumber++;
-        changed = true;
-      }
-    }
-    if (changed) await writeJson(indexPath, next);
-    for (const handle of projectHandles) result.set(handle.metadataPath, next.shots[relative(projectPath, handle.metadataPath)]!);
-  }
-  return result;
 }
 
 function legacyCategory(purpose: string): string {

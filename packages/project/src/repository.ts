@@ -30,6 +30,12 @@ export interface GenerationHandle {
   metadata: GenerationRecord;
 }
 
+interface ShotIndex {
+  schemaVersion: 1;
+  nextNumber: number;
+  shots: Record<string, number>;
+}
+
 export class ProjectRepository {
   readonly root: string;
 
@@ -126,6 +132,45 @@ export class ProjectRepository {
       }
     }
     return records.sort((a, b) => b.metadata.createdAt.localeCompare(a.metadata.createdAt));
+  }
+
+  async shotNumbers(project?: ProjectHandle): Promise<Map<string, number>> {
+    const handles = await this.generations(project);
+    const result = new Map<string, number>();
+    const byProject = new Map<string, GenerationHandle[]>();
+    for (const handle of handles.filter((candidate) => candidate.metadata.outputFiles.length > 0)) {
+      byProject.set(handle.project.path, [...(byProject.get(handle.project.path) ?? []), handle]);
+    }
+    for (const [projectPath, projectHandles] of byProject) {
+      const indexPath = join(projectPath, "shot-index.json");
+      let index: ShotIndex | undefined;
+      try { index = JSON.parse(await readFile(indexPath, "utf8")) as ShotIndex; } catch { /* Created below. */ }
+      const valid = index?.schemaVersion === 1 && index.shots && typeof index.shots === "object";
+      const next: ShotIndex = valid ? index! : { schemaVersion: 1, nextNumber: 1, shots: {} };
+      let changed = !valid;
+      const missing = projectHandles
+        .filter((handle) => next.shots[relative(projectPath, handle.metadataPath)] === undefined)
+        .sort((a, b) => a.metadata.createdAt.localeCompare(b.metadata.createdAt));
+      for (const handle of missing) {
+        next.shots[relative(projectPath, handle.metadataPath)] = next.nextNumber++;
+        changed = true;
+      }
+      if (changed) await writeJson(indexPath, next);
+      for (const handle of projectHandles) {
+        result.set(handle.metadataPath, next.shots[relative(projectPath, handle.metadataPath)]!);
+      }
+    }
+    return result;
+  }
+
+  async generationByShot(project: ProjectHandle, shotNumber: number): Promise<GenerationHandle> {
+    if (!Number.isInteger(shotNumber) || shotNumber < 1) throw new Error(`Invalid shot number: ${shotNumber}`);
+    const handles = await this.generations(project);
+    const numbers = await this.shotNumbers(project);
+    const match = handles.find((handle) => numbers.get(handle.metadataPath) === shotNumber);
+    if (!match) throw new Error(`Unknown shot #${shotNumber} in ${project.metadata.title}.`);
+    if (!match.metadata.outputFiles.length) throw new Error(`Shot #${shotNumber} has no local output asset.`);
+    return match;
   }
 
   async updateReview(metadataPath: string, patch: Record<string, unknown>): Promise<GenerationRecord> {

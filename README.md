@@ -142,6 +142,18 @@ pnpm lab probe goob \
 
 To use a local reference, keep it inside the project's `references/` directory, inspect the live schema, then add `--reference <path> --reference-field <exact-schema-field>`. For object-shaped reference arrays, add `--reference-array --reference-template '{"url":"$url"}'` and any model-supported fields. Figment uploads a Krea asset and stores the mapping in `references/.krea-assets.json` without changing the source file.
 
+Existing outputs can be referenced by the stable number shown in Studio:
+
+```bash
+pnpm lab probe goob \
+  --model <model-id> \
+  --prompt "preserve the character while exploring a calmer seated pose" \
+  --reference-shot 24 \
+  --reference-field <exact-schema-field>
+```
+
+Figment resolves `#24` to its local output, uploads that image, and records the source generation, batch, file, and shot number. The image remains a structured model input rather than being silently appended to the textual prompt. In Studio, references appear as thumbnails in the lightbox; source generations are labelled with their shot number and open when clicked.
+
 Use `pnpm lab generate` for a controlled batch. Pass a recently researched `--cost-per-image` when Krea's live catalogue omits price metadata. Larger or estimated-over-$1 batches require `--yes` after the cost preflight. If a process is interrupted, run `pnpm lab reconcile <project>` before considering a retry.
 
 If Krea returns `402 Payment Required`, the workspace API balance is empty even if the account has an active subscription. Top up at [krea.ai/app/api/](https://www.krea.ai/app/api/) and reconcile any existing job records before retrying.

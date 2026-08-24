@@ -111,6 +111,13 @@ export default function App() {
     } catch { setProjectSave("error"); }
   }
 
+  function openGeneration(target: StudioGeneration) {
+    const sequence = data?.generations.filter((candidate) => candidate.projectId === target.projectId) ?? [target];
+    const index = sequence.findIndex((candidate) => candidate.metadataPath === target.metadataPath && candidate.outputFile === target.outputFile);
+    setLightboxItems(sequence);
+    setSelected(index < 0 ? 0 : index);
+  }
+
   if (error) return <main className="state"><p className="eyebrow">Figment Studio</p><h1>Couldn’t open the lab.</h1><p>{error}</p></main>;
   if (!data) return <main className="state"><p className="eyebrow">Figment Studio</p><h1>Opening the lab…</h1></main>;
 
@@ -183,7 +190,7 @@ export default function App() {
       {activeProject && view === "references" && <References project={activeProject} />}
       {activeProject && view === "prototypes" && <Prototypes project={activeProject} />}
     </main>
-    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} />}
+    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} project={data.projects.find((project) => project.metadata.id === lightboxItems[selected]!.projectId)} generations={data.generations} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} onOpenGeneration={openGeneration} />}
   </div>;
 }
 
@@ -194,7 +201,7 @@ function GalleryCard({ item, onOpen, onReview }: { item: StudioGeneration; onOpe
   </article>;
 }
 
-function Lightbox({ item, position, total, saveState, onClose, onMove, onReview }: { item: StudioGeneration; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void }) {
+function Lightbox({ item, project, generations, position, total, saveState, onClose, onMove, onReview, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onOpenGeneration: (item: StudioGeneration) => void }) {
   const [note, setNote] = useState(item.metadata.review.note ?? "");
   const [tags, setTags] = useState(item.metadata.review.tags.join(", "));
   useEffect(() => {
@@ -237,11 +244,28 @@ function Lightbox({ item, position, total, saveState, onClose, onMove, onReview 
       <div className="facts"><Fact label="Model" value={item.metadata.model} /><Fact label="Cost" value={cost ? `${cost.kind === "estimate" ? "~" : ""}$${cost.amount.toFixed(3)}` : "Unknown"} /><Fact label="Created" value={new Date(item.metadata.createdAt).toLocaleString()} /><Fact label="Dimensions" value={dimensions(item.metadata)} /></div>
       <Detail label="Review note"><textarea value={note} placeholder="What works? What needs to change?" onChange={(event) => setNote(event.target.value)} onBlur={() => onReview({ note })} /></Detail>
       <Detail label="Tags"><input value={tags} placeholder="expressive, face, warm" onChange={(event) => setTags(event.target.value)} onBlur={() => onReview({ tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean) })} /></Detail>
-      {item.metadata.references.length > 0 && <Detail label="References">{item.metadata.references.map((reference) => <code key={reference.localPath}>{reference.localPath}</code>)}</Detail>}
+      {item.metadata.references.length > 0 && <GenerationReferences item={item} project={project} generations={generations} onOpenGeneration={onOpenGeneration} />}
       {item.metadata.parentGenerationId && <Detail label="Lineage"><p>Derived from {item.metadata.parentGenerationId}</p></Detail>}
-      <details><summary>Parameters & provenance</summary><pre>{JSON.stringify({ batch: item.batchName, jobId: item.metadata.jobId, parameters: item.metadata.parameters, provider: item.metadata.provider }, null, 2)}</pre></details>
+      <details><summary>Parameters & provenance</summary><pre>{JSON.stringify({ batch: item.batchName, jobId: item.metadata.jobId, parameters: item.metadata.parameters, references: item.metadata.references, provider: item.metadata.provider }, null, 2)}</pre></details>
     </aside>
   </div>;
+}
+
+function GenerationReferences({ item, project, generations, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; onOpenGeneration: (item: StudioGeneration) => void }) {
+  return <Detail label="References"><div className="generation-references">{item.metadata.references.map((reference) => {
+    const source = reference.source;
+    const target = source && generations.find((candidate) => candidate.projectId === source.projectId
+      && normalPath(candidate.metadataPath).endsWith(`/${normalPath(source.metadataPath)}`)
+      && candidate.outputFile === source.outputFile);
+    const libraryReference = project?.references.find((candidate) => normalPath(candidate.path).endsWith(`/${normalPath(reference.localPath)}`));
+    const imageUrl = target?.imageUrl ?? libraryReference?.url;
+    const label = source ? `Shot #${source.shotNumber}` : fileName(reference.localPath);
+    const caption = source ? "Source generation" : "Reference file";
+    const content = <>{imageUrl ? <img src={imageUrl} alt={label} /> : <span className="reference-placeholder" aria-hidden="true">◫</span>}<span><strong>{label}</strong><small>{caption}</small></span></>;
+    return target
+      ? <button type="button" className="generation-reference" key={`${reference.localPath}-${source?.shotNumber ?? "file"}`} onClick={() => onOpenGeneration(target)} title={`Open ${label}`}>{content}</button>
+      : <div className="generation-reference" key={`${reference.localPath}-${source?.shotNumber ?? "file"}`}>{content}</div>;
+  })}</div></Detail>;
 }
 
 function DocumentView({ project }: { project: StudioProject }) {
@@ -299,6 +323,8 @@ function friendlyStatus(status: ProjectStatus) { return status.slice(0, 1).toUpp
 function dimensions(item: StudioGeneration["metadata"]) { return item.width && item.height ? `${item.width} × ${item.height}` : item.aspectRatio ?? item.resolution ?? "Unknown"; }
 function clearDirection(): ReviewPatch { return { favourite: false, signal: "unreviewed" }; }
 function timeAgo(value: string) { const seconds = Math.round((Date.now() - Date.parse(value)) / 1000); return seconds < 60 ? "just now" : `${Math.round(seconds / 60)}m ago`; }
+function normalPath(value: string) { return value.replaceAll("\\", "/"); }
+function fileName(value: string) { return normalPath(value).split("/").at(-1) ?? value; }
 function readStudioPreferences(): Partial<StudioPreferences> {
   try {
     const value = JSON.parse(localStorage.getItem(STUDIO_PREFERENCES_KEY) ?? "{}") as Record<string, unknown>;

@@ -37,6 +37,16 @@ export interface ReferenceRecord {
   assetId?: string;
   assetUrl?: string;
   uploadedAt?: string;
+  source?: GenerationReferenceSource;
+}
+
+export interface GenerationReferenceSource {
+  projectId: string;
+  generationId: string;
+  batchId: string;
+  metadataPath: string;
+  outputFile: string;
+  shotNumber: number;
 }
 
 export interface ReviewMetadata {

@@ -292,7 +292,7 @@ function Prototypes({ project }: { project: StudioProject }) {
     {selected && <section className="prototype-stage">
       <header><div><p className="eyebrow">{selected.kind} prototype</p><h2>{selected.title}</h2>{selected.description && <p>{selected.description}</p>}</div>{selected.launchUrl && <a href={selected.launchUrl} target="_blank" rel="noreferrer">Open in new tab ↗</a>}</header>
       {selected.launchUrl && selected.embeddable
-        ? <iframe src={selected.launchUrl} title={`${selected.title} prototype`} sandbox="allow-scripts allow-forms allow-modals allow-popups" />
+        ? <iframe src={selected.launchUrl} title={`${selected.title} prototype`} sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin allow-downloads" />
         : <div className="prototype-empty"><p>{selected.launchUrl ? "This prototype is configured to open separately." : "There isn’t a runnable preview yet."}</p><code>{selected.path}</code>{!selected.launchUrl && <small>Add an <strong>index.html</strong>, or a <strong>prototype.json</strong> pointing to its local development URL.</small>}</div>}
     </section>}
   </div>;

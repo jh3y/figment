@@ -143,7 +143,7 @@ pnpm lab probe goob \
   --params '{"aspect_ratio":"1:1"}'
 ```
 
-To use a local reference, keep it inside the project's `references/` directory, inspect the live schema, then add `--reference <path> --reference-field <exact-schema-field>`. For object-shaped reference arrays, add `--reference-array --reference-template '{"url":"$url"}'` and any model-supported fields. Figment uploads a Krea asset and stores the mapping in `references/.krea-assets.json` without changing the source file.
+To use a local reference, keep it inside the project's `references/` directory, inspect the live schema, then add `--reference <path> --reference-field <exact-schema-field>`. Figment reads the field's type from the live schema, so a single reference passed to an array-typed field such as `image_urls` is wrapped automatically; pass `--reference-array` to force array shape when the schema cannot be read. For object-shaped reference arrays, add `--reference-template '{"url":"$url"}'` and any model-supported fields. Figment uploads a Krea asset and stores the mapping in `references/.krea-assets.json` without changing the source file.
 
 Existing outputs can be referenced by the stable number shown in Studio:
 

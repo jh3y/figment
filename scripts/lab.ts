@@ -89,7 +89,8 @@ async function generate(kind: "probe" | "batch"): Promise<void> {
     const values = references.map((reference) => template
       ? replaceUrlTemplate(JSON.parse(template) as unknown, reference.assetUrl!)
       : reference.assetUrl);
-    setPath(parameters, referenceField, values.length === 1 && !booleanArg("reference-array") ? values[0] : values);
+    const asArray = booleanArg("reference-array") || values.length > 1 || await expectsArray(model, referenceField);
+    setPath(parameters, referenceField, asArray ? values : values[0]);
   }
   const estimate = await estimateCost(model, count);
   const estimateText = estimate ? `$${estimate.amount.toFixed(3)} estimated total` : "cost unavailable from the live catalogue";
@@ -381,6 +382,27 @@ function pngDimensions(bytes: Uint8Array, contentType?: string): { width: number
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint32(0) !== 0x89504e47 || view.getUint32(4) !== 0x0d0a1a0a) return undefined;
   return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
+// A single reference sent to an array-typed schema field is rejected by Krea as
+// "Validation failed" before generation, with nothing to indicate the shape was
+// wrong. The live schema already knows the field type, so consult it rather than
+// making the human rediscover --reference-array by trial and error. Explicit
+// --reference-array still wins, and an unreadable schema falls back to the old
+// single-value behaviour rather than failing the run.
+async function expectsArray(model: string, field: string): Promise<boolean> {
+  try {
+    const schema = await new KreaAdapter().getModelSchema(model);
+    const input = (schema as { inputSchema?: unknown } | undefined)?.inputSchema;
+    let node: unknown = input;
+    for (const part of field.split(".").filter(Boolean)) {
+      const properties = (node as { properties?: Record<string, unknown> } | undefined)?.properties;
+      if (!properties || typeof properties !== "object") return false;
+      node = properties[part];
+      if (!node) return false;
+    }
+    return (node as { type?: unknown }).type === "array";
+  } catch { return false; }
 }
 
 function setPath(target: Record<string, unknown>, path: string, value: unknown): void {

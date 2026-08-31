@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectStatus, ReviewMetadata } from "@figment/core";
 import { Markdown } from "./Markdown";
 import type { StudioData, StudioGeneration, StudioProject } from "./types";
@@ -196,9 +196,17 @@ export default function App() {
 
 function GalleryCard({ item, onOpen, onReview }: { item: StudioGeneration; onOpen: () => void; onReview: (patch: ReviewPatch) => void }) {
   return <article className={`card ${item.metadata.review.signal === "reject" ? "rejected" : ""}`}>
-    <button className="artwork" onClick={onOpen}><img src={item.imageUrl} alt={item.metadata.prompt} loading="lazy" /><span className="kind">{friendlyCategory(item.category)}</span><span className="shot-number">#{item.shotNumber}</span></button>
+    <button className="artwork" onClick={onOpen}><Media item={item} hoverPlay /><span className="kind">{friendlyCategory(item.category)}</span><span className="shot-number">#{item.shotNumber}</span></button>
     <button className={`heart card-heart ${item.metadata.review.favourite ? "active" : ""}`} aria-label={`Favourite shot ${item.shotNumber}`} onClick={() => onReview(item.metadata.review.favourite ? clearDirection() : { favourite: true, signal: "unreviewed" })}>♥</button>
   </article>;
+}
+
+function Media({ item, hoverPlay = false, autoPlay = false }: { item: StudioGeneration; hoverPlay?: boolean; autoPlay?: boolean }) {
+  const video = useRef<HTMLVideoElement>(null);
+  if (item.mediaType !== "video") return <img src={item.imageUrl} alt={item.metadata.prompt} loading="lazy" />;
+  const play = () => { if (hoverPlay) void video.current?.play(); };
+  const pause = () => { if (hoverPlay && video.current) { video.current.pause(); video.current.currentTime = 0; } };
+  return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : "metadata"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} />;
 }
 
 function Lightbox({ item, project, generations, position, total, saveState, onClose, onMove, onReview, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onOpenGeneration: (item: StudioGeneration) => void }) {
@@ -225,7 +233,7 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
   return <div className="lightbox" role="dialog" aria-modal="true">
     <button className="close" onClick={onClose}>Close <span>×</span></button>
     <button className="previous" aria-label="Previous image" title="Previous · Left arrow" onClick={() => onMove(-1)}>←</button>
-    <div className="lightbox-art"><img src={item.imageUrl} alt={item.metadata.prompt} /></div>
+    <div className="lightbox-art"><Media key={`${item.metadataPath}-${item.outputFile}`} item={item} autoPlay /></div>
     <button className="next" aria-label="Next image" title="Next · Right arrow" onClick={() => onMove(1)}>→</button>
     <aside className="details">
       <p className="eyebrow">Shot #{item.shotNumber} · {friendlyCategory(item.category)} · {position + 1} / {total}</p>

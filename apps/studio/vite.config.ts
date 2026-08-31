@@ -103,9 +103,11 @@ async function studioData() {
     outputIndex,
     outputFile,
     imageUrl: fileUrl(join(handle.batchPath, outputFile)),
+    mediaType: isVideoFile(outputFile) ? "video" as const : "image" as const,
   })));
   return { scannedAt: new Date().toISOString(), projects: projectData, generations };
 }
+function isVideoFile(path: string): boolean { return [".mp4", ".webm", ".ogv", ".mov"].includes(extname(path).toLowerCase()); }
 
 function legacyCategory(purpose: string): string {
   const value = purpose.toLowerCase();

@@ -34,6 +34,7 @@ export interface StudioGeneration {
   outputIndex: number;
   outputFile: string;
   imageUrl: string;
+  mediaType: "image" | "video";
 }
 
 export interface StudioData {

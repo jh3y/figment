@@ -374,7 +374,10 @@ function jsonArg(name: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 function extensionFor(contentType?: string): string {
-  return ({ "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif" } as Record<string, string>)[contentType ?? ""] ?? "png";
+  return ({
+    "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif",
+    "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "video/ogg": "ogv",
+  } as Record<string, string>)[contentType ?? ""] ?? "png";
 }
 
 function pngDimensions(bytes: Uint8Array, contentType?: string): { width: number; height: number } | undefined {

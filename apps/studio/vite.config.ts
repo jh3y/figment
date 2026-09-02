@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import type { ProjectStatus } from "../../packages/core/src/index.ts";
-import { ProjectRepository } from "../../packages/project/src/repository.ts";
+import { ProjectRepository, type GenerationHandle } from "../../packages/project/src/repository.ts";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const projectsRoot = resolve(process.env.FIGMENT_PROJECTS_DIR ?? join(repositoryRoot, "projects"));
@@ -21,15 +21,27 @@ function filesystemApi(): Plugin {
   return {
     name: "figment-filesystem-api",
     configureServer(server) {
-      let suppressReloadUntil = 0;
-      let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+      let suppressWatchUntil = 0;
+      let changedAt: string | undefined;
+      let activityTimer: ReturnType<typeof setTimeout> | undefined;
+      let recheckTimer: ReturnType<typeof setTimeout> | undefined;
+      // Studio is told what changed and decides when to pull it in; a full reload would throw away the view mid-generation.
+      const publishActivity = async () => {
+        const activity = await activityState(changedAt);
+        server.ws.send({ type: "custom", event: "figment:activity", data: activity });
+        clearTimeout(recheckTimer);
+        // An abandoned run stops writing, so keep re-checking until its records age out of the active window.
+        if (activity.generating) recheckTimer = setTimeout(() => void publishActivity(), 15_000);
+      };
       server.watcher.add(projectsRoot);
       server.watcher.on("all", (_event, changedPath) => {
         const path = resolve(changedPath);
-        if (!inside(projectsRoot, path) || path.endsWith(".tmp") || path.endsWith("shot-index.json") || Date.now() < suppressReloadUntil) return;
-        clearTimeout(reloadTimer);
-        reloadTimer = setTimeout(() => server.ws.send({ type: "full-reload", path: "*" }), 450);
+        if (!inside(projectsRoot, path) || path.endsWith(".tmp") || path.endsWith("shot-index.json") || Date.now() < suppressWatchUntil) return;
+        changedAt = new Date().toISOString();
+        clearTimeout(activityTimer);
+        activityTimer = setTimeout(() => void publishActivity(), 450);
       });
+      server.ws.on("connection", () => void publishActivity());
       server.middlewares.use(async (request, response, next) => {
         try {
           const url = new URL(request.url ?? "/", "http://localhost");
@@ -37,14 +49,14 @@ function filesystemApi(): Plugin {
           if (request.method === "POST" && url.pathname === "/api/review") {
             const body = await readBody(request) as { metadataPath?: string; review?: Record<string, unknown> };
             if (!body.metadataPath || !body.review) return json(response, { error: "Invalid review payload" }, 400);
-            suppressReloadUntil = Date.now() + 1_000;
+            suppressWatchUntil = Date.now() + 1_000;
             const record = await repository.updateReview(resolve(repositoryRoot, body.metadataPath), body.review);
             return json(response, record);
           }
           if (request.method === "POST" && url.pathname === "/api/project-status") {
             const body = await readBody(request) as { projectId?: string; status?: ProjectStatus };
             if (!body.projectId || !body.status || !["active", "paused", "complete", "archived"].includes(body.status)) return json(response, { error: "Invalid project status payload" }, 400);
-            suppressReloadUntil = Date.now() + 1_000;
+            suppressWatchUntil = Date.now() + 1_000;
             return json(response, await repository.updateStatus(body.projectId, body.status));
           }
           if (request.method === "GET" && url.pathname === "/project-file") {
@@ -105,7 +117,52 @@ async function studioData() {
     imageUrl: fileUrl(join(handle.batchPath, outputFile)),
     mediaType: isVideoFile(outputFile) ? "video" as const : "image" as const,
   })));
-  return { scannedAt: new Date().toISOString(), projects: projectData, generations };
+  return { scannedAt: new Date().toISOString(), projects: projectData, generations, activity: await activityFrom(handles) };
+}
+
+const ACTIVE_JOB_STATUSES = new Set(["backlogged", "queued", "scheduled", "processing", "sampling", "intermediate-complete"]);
+const ACTIVITY_STALE_MS = 180_000;
+
+interface StudioActivityBatch { projectId: string; projectTitle: string; batchName: string; kind: "probe" | "batch"; model: string; completed: number; total: number }
+interface StudioActivity { generating: boolean; batches: StudioActivityBatch[]; outputs: number; changedAt?: string; checkedAt: string }
+
+async function activityState(changedAt?: string): Promise<StudioActivity> {
+  return activityFrom(await repository.generations(), changedAt);
+}
+
+async function activityFrom(handles: GenerationHandle[], changedAt?: string): Promise<StudioActivity> {
+  const groups = new Map<string, GenerationHandle[]>();
+  let outputs = 0;
+  for (const handle of handles) {
+    outputs += handle.metadata.outputFiles.length;
+    groups.set(handle.batchPath, [...(groups.get(handle.batchPath) ?? []), handle]);
+  }
+  const batches: StudioActivityBatch[] = [];
+  for (const [batchPath, records] of groups) {
+    const running = records.filter((record) => ACTIVE_JOB_STATUSES.has(record.metadata.status));
+    if (!running.length || !(await writtenRecently(running.map((record) => record.metadataPath)))) continue;
+    const first = records[0]!;
+    batches.push({
+      projectId: first.project.metadata.id,
+      projectTitle: first.project.metadata.title,
+      batchName: batchPath.split(sep).at(-1)!,
+      kind: first.kind,
+      model: first.manifest.model,
+      completed: records.filter((record) => record.metadata.status === "completed").length,
+      total: first.manifest.generationIds.length,
+    });
+  }
+  return { generating: batches.length > 0, batches, outputs, changedAt, checkedAt: new Date().toISOString() };
+}
+
+// A record only counts as in flight while something is still writing it, so a crashed run cannot hold Studio forever.
+async function writtenRecently(paths: string[]): Promise<boolean> {
+  const cutoff = Date.now() - ACTIVITY_STALE_MS;
+  for (const path of paths) {
+    try { if ((await stat(path)).mtimeMs > cutoff) return true; }
+    catch { /* The record was removed between the scan and this check. */ }
+  }
+  return false;
 }
 function isVideoFile(path: string): boolean { return [".mp4", ".webm", ".ogv", ".mov"].includes(extname(path).toLowerCase()); }
 
@@ -138,7 +195,7 @@ async function staticStudioData(emit: (sourcePath: string, fileName: string) => 
     const path = join(dirname(resolve(repositoryRoot, generation.metadataPath)), generation.outputFile);
     return { ...generation, imageUrl: await emit(path, staticAssetName(relative(repositoryRoot, path))) };
   }));
-  return { ...data, readOnly: true, projects, generations };
+  return { ...data, readOnly: true, activity: undefined, projects, generations };
 }
 
 function fileDescriptor(path: string) {

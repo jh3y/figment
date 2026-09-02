@@ -37,9 +37,28 @@ export interface StudioGeneration {
   mediaType: "image" | "video";
 }
 
+export interface StudioActivityBatch {
+  projectId: string;
+  projectTitle: string;
+  batchName: string;
+  kind: "probe" | "batch";
+  model: string;
+  completed: number;
+  total: number;
+}
+
+export interface StudioActivity {
+  generating: boolean;
+  batches: StudioActivityBatch[];
+  outputs: number;
+  changedAt?: string;
+  checkedAt: string;
+}
+
 export interface StudioData {
   scannedAt: string;
   readOnly?: boolean;
   projects: StudioProject[];
   generations: StudioGeneration[];
+  activity?: StudioActivity;
 }

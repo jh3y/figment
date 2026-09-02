@@ -68,6 +68,15 @@ button { color: inherit; }
 .sidebar-note { margin-top: 12px; padding: 13px 10px 0; display: grid; gap: 4px; border-top: 1px solid var(--line); font-size: 10px; }
 .sidebar-note span::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 7px; border-radius: 50%; background: #75a358; }
 .sidebar-note small { color: var(--muted); padding-left: 12px; }
+.sidebar-note.waiting span::before { background: #4f86c6; }
+.sidebar-note.generating span::before { background: #d9a441; animation: activity-pulse 1.6s ease-in-out infinite; }
+.sidebar-note.snapshot span::before { background: var(--muted); opacity: .5; }
+.sidebar-refresh { justify-self: start; margin: 5px 0 0 12px; border: 1px solid var(--line); border-radius: 3px; background: transparent; padding: 4px 7px; color: var(--ink); cursor: pointer; font: 8px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; }
+.sidebar-refresh:hover:not(:disabled) { background: var(--hover); }
+.sidebar-refresh:disabled { color: var(--muted); cursor: default; }
+.sidebar-refresh:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
+@keyframes activity-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
+@media (prefers-reduced-motion: reduce) { .sidebar-note.generating span::before { animation: none; } }
 .workspace { min-width: 0; padding: 0 28px 60px; }
 .topbar { min-height: 102px; display: flex; align-items: end; justify-content: space-between; padding: 24px 3px 18px; border-bottom: 1px solid var(--line); }
 .topbar .eyebrow { margin: 0; }

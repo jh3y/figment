@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectStatus, ReviewMetadata } from "@figment/core";
 import { Markdown } from "./Markdown";
-import type { StudioData, StudioGeneration, StudioProject } from "./types";
+import type { StudioActivity, StudioData, StudioGeneration, StudioProject } from "./types";
 
 type View = "gallery" | "brief" | "references" | "prototypes";
 type ThemePreference = "system" | "light" | "dark";
@@ -26,6 +26,9 @@ export default function App() {
   const [showRejected, setShowRejected] = useState(preferences.showRejected ?? localStorage.getItem("figment-show-rejected") === "true");
   const [reviewSaves, setReviewSaves] = useState<Record<string, ReviewSaveState>>({});
   const [projectSave, setProjectSave] = useState<ReviewSaveState>("idle");
+  const [liveActivity, setLiveActivity] = useState<StudioActivity>();
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
   const [theme, setTheme] = useState<ThemePreference>(() => {
     const saved = localStorage.getItem("figment-theme");
     return saved === "light" || saved === "dark" ? saved : "system";
@@ -46,6 +49,13 @@ export default function App() {
 
   useEffect(() => { void load(); }, []);
   useEffect(() => {
+    const hot = import.meta.hot;
+    if (!hot) return;
+    const handler = (value: StudioActivity) => setLiveActivity(value);
+    hot.on("figment:activity", handler);
+    return () => hot.off("figment:activity", handler);
+  }, []);
+  useEffect(() => {
     localStorage.setItem(STUDIO_PREFERENCES_KEY, JSON.stringify({ projectId, view, model, category, batch, review, tag, showRejected } satisfies StudioPreferences));
   }, [projectId, view, model, category, batch, review, tag, showRejected]);
   useEffect(() => {
@@ -54,17 +64,50 @@ export default function App() {
     if (!data.projects.some((project) => project.metadata.id === projectId)) { setProjectId("all"); setView("gallery"); }
   }, [data, projectId, view]);
   useEffect(() => { setProjectSave("idle"); }, [projectId]);
-  async function load() {
-    try {
-      for (const endpoint of ["/api/studio", "./studio-data.json"]) {
-        const response = await fetch(endpoint);
-        if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) continue;
-        setData(await response.json() as StudioData);
-        return;
-      }
-      throw new Error("Studio could not read the projects directory.");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+  async function fetchStudioData(): Promise<StudioData> {
+    for (const endpoint of ["/api/studio", "./studio-data.json"]) {
+      const response = await fetch(endpoint);
+      if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) continue;
+      return await response.json() as StudioData;
+    }
+    throw new Error("Studio could not read the projects directory.");
   }
+
+  function applyStudioData(next: StudioData) {
+    setData(next);
+    // A change landing while the snapshot was being read has to survive it, or its pending marker is lost.
+    setLiveActivity((current) => current?.changedAt && next.activity && current.changedAt > next.scannedAt
+      ? { ...next.activity, changedAt: current.changedAt }
+      : next.activity);
+  }
+
+  async function load() {
+    try { applyStudioData(await fetchStudioData()); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+  }
+
+  // A refresh swaps the snapshot in place, so the view, scroll position, and open image all survive it.
+  async function refresh() {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    setRefreshing(true);
+    try { applyStudioData(await fetchStudioData()); }
+    catch { /* Studio keeps the last good snapshot and tries again on the next change. */ }
+    finally {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    }
+  }
+
+  const activity = liveActivity ?? data?.activity;
+  const generating = Boolean(activity?.generating);
+  const pendingOutputs = data && activity ? Math.max(0, activity.outputs - data.generations.length) : 0;
+  const staleSnapshot = Boolean(data && activity?.changedAt && activity.changedAt > data.scannedAt);
+  // Work arriving while nothing is generating is folded in quietly; a live run is held until it finishes.
+  useEffect(() => {
+    if (!data || data.readOnly || !staleSnapshot || generating) return;
+    void refresh();
+  }, [data, staleSnapshot, generating]);
 
   const activeProject = data?.projects.find((project) => project.metadata.id === projectId);
   const visible = useMemo(() => (data?.generations ?? []).filter((item) => {
@@ -140,7 +183,7 @@ export default function App() {
         </button>)}
       </section>)}
       <ThemeControl value={theme} onChange={setTheme} />
-      <div className="sidebar-note"><span>Filesystem live</span><small>Scanned {timeAgo(data.scannedAt)}</small></div>
+      <ActivityLight readOnly={Boolean(data.readOnly)} activity={activity} scannedAt={data.scannedAt} pending={pendingOutputs} stale={staleSnapshot} refreshing={refreshing} onRefresh={() => void refresh()} />
     </aside>
 
     <main className="workspace">
@@ -191,6 +234,29 @@ export default function App() {
       {activeProject && view === "prototypes" && <Prototypes project={activeProject} />}
     </main>
     {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} project={data.projects.find((project) => project.metadata.id === lightboxItems[selected]!.projectId)} generations={data.generations} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} onOpenGeneration={openGeneration} />}
+  </div>;
+}
+
+function ActivityLight({ readOnly, activity, scannedAt, pending, stale, refreshing, onRefresh }: { readOnly: boolean; activity?: StudioActivity; scannedAt: string; pending: number; stale: boolean; refreshing: boolean; onRefresh: () => void }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((value) => value + 1), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  if (readOnly) return <div className="sidebar-note snapshot"><span>Static snapshot</span><small>Built {timeAgo(scannedAt)}</small></div>;
+  const generating = activity?.generating ?? false;
+  const batch = activity?.batches[0];
+  const others = (activity?.batches.length ?? 0) - 1;
+  const label = generating ? "Generating" : stale ? pending > 0 ? `${pending} new ${pending === 1 ? "output" : "outputs"}` : "Project files changed" : "Filesystem live";
+  const detail = generating && batch
+    ? `${batch.projectTitle} · ${batch.kind} ${batch.completed}/${batch.total}${others > 0 ? ` · +${others} more` : ""}`
+    : `Scanned ${timeAgo(scannedAt)}`;
+  return <div className={`sidebar-note ${generating ? "generating" : stale ? "waiting" : "live"}`}>
+    <span role="status" aria-live="polite">{label}</span>
+    <small>{detail}</small>
+    {(generating || stale) && <button type="button" className="sidebar-refresh" disabled={refreshing} onClick={onRefresh} title={generating ? "Pull in finished work without waiting for the run to end" : "Load the latest project files"}>
+      {refreshing ? "Refreshing…" : pending > 0 ? `Show ${pending} now` : "Refresh now"}
+    </button>}
   </div>;
 }
 

@@ -24,7 +24,7 @@ A Krea token is only required for live catalogue, upload, and generation command
 - Keep Krea calls inside `packages/krea/`; discover live models and schemas instead of hard-coding provider assumptions.
 - Prefer targeted probes before costly batches, and clearly distinguish estimated, actual, and unavailable costs.
 - Keep Studio an interface over project files. Local writes must be safe and static builds must remain read-only.
-- Do not blanket-ignore `projects/`; generated assets and creative history may be intentionally committed.
+- Do not blanket-ignore `projects/`; generated assets and creative history may be intentionally committed. If you also use your checkout for your own creative work, keep that work local with `echo /projects/ >> .git/info/exclude` instead of editing `.gitignore`. The exclusion then stays in your clone, rather than shipping to everyone who clones Figment.
 
 ## Pull requests
 

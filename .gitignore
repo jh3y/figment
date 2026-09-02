@@ -1,8 +1,5 @@
 node_modules/
 .pnpm-store/
-
-## Personal creative projects stay local; Figment source code is the public repo.
-/projects/
 dist/
 .vite/
 .cache/

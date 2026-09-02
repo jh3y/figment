@@ -121,6 +121,7 @@ export default function App() {
       && (review === "all" || (review === "favourite" ? reviewValue.favourite : reviewValue.signal === review));
   }), [data, projectId, model, category, batch, review, tag, showRejected]);
 
+  const missingVisible = visible.filter((item) => !item.available).length;
   const models = unique((data?.generations ?? []).filter(inProject).map((item) => item.metadata.model));
   const categories = unique((data?.generations ?? []).filter(inProject).map((item) => item.category));
   const batches = unique((data?.generations ?? []).filter(inProject).map((item) => item.batchName));
@@ -224,6 +225,7 @@ export default function App() {
           {tags.length > 0 && <Select label="Tag" value={tag} options={tags} onChange={setTag} />}
           <button className={`rejected-toggle ${showRejected ? "active" : ""}`} type="button" aria-pressed={showRejected} onClick={() => setShowRejected((current) => !current)}>{showRejected ? "Hide rejected" : "Show rejected"}</button>
           <span className="count">{visible.length} {visible.length === 1 ? "output" : "outputs"}</span>
+          {missingVisible > 0 && <span className="count missing" title="These generations are recorded, but their files are not in this working copy">{missingVisible} not available locally</span>}
         </div>
         {visible.length ? <div className="gallery">{visible.map((item, index) => <GalleryCard item={item} key={`${item.metadataPath}-${item.outputIndex}`} onOpen={() => { setLightboxItems(visible); setSelected(index); }} onReview={(patch) => void patchReview(item, patch)} />)}</div>
           : <Empty hasProjects={data.projects.length > 0} />}
@@ -269,10 +271,23 @@ function GalleryCard({ item, onOpen, onReview }: { item: StudioGeneration; onOpe
 
 function Media({ item, hoverPlay = false, autoPlay = false }: { item: StudioGeneration; hoverPlay?: boolean; autoPlay?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
-  if (item.mediaType !== "video") return <img src={item.imageUrl} alt={item.metadata.prompt} loading="lazy" />;
+  // The scan reports what was on disk; a file can still vanish between the scan and the render.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [item.imageUrl]);
+  if (!item.available || failed) return <MissingMedia item={item} />;
+  if (item.mediaType !== "video") return <img src={item.imageUrl} alt={item.metadata.prompt} loading="lazy" onError={() => setFailed(true)} />;
   const play = () => { if (hoverPlay) void video.current?.play(); };
   const pause = () => { if (hoverPlay && video.current) { video.current.pause(); video.current.currentTime = 0; } };
-  return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : "metadata"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} />;
+  return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : "metadata"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} onError={() => setFailed(true)} />;
+}
+
+// The provenance is still here, so name the file that is missing rather than showing a broken image.
+function MissingMedia({ item }: { item: StudioGeneration }) {
+  return <span className="media-missing" role="img" aria-label={`${item.outputFile} is not available locally`}>
+    <span className="media-missing-mark" aria-hidden="true">◫</span>
+    <strong>Not available locally</strong>
+    <small>{item.outputFile}</small>
+  </span>;
 }
 
 function Lightbox({ item, project, generations, position, total, saveState, onClose, onMove, onReview, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onOpenGeneration: (item: StudioGeneration) => void }) {

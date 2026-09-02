@@ -35,6 +35,7 @@ export interface StudioGeneration {
   outputFile: string;
   imageUrl: string;
   mediaType: "image" | "video";
+  available: boolean;
 }
 
 export interface StudioActivityBatch {

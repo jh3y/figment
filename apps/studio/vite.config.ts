@@ -101,7 +101,8 @@ async function studioData() {
   })));
   const handles = await repository.generations();
   const numbers = await repository.shotNumbers();
-  const generations = handles.flatMap((handle) => handle.metadata.outputFiles.map((outputFile, outputIndex) => ({
+  // Provenance may be committed without its generated assets, so the record can outlive the file it describes.
+  const generations = await Promise.all(handles.flatMap((handle) => handle.metadata.outputFiles.map(async (outputFile, outputIndex) => ({
     projectId: handle.project.metadata.id,
     projectSlug: handle.project.metadata.slug,
     projectTitle: handle.project.metadata.title,
@@ -116,7 +117,8 @@ async function studioData() {
     outputFile,
     imageUrl: fileUrl(join(handle.batchPath, outputFile)),
     mediaType: isVideoFile(outputFile) ? "video" as const : "image" as const,
-  })));
+    available: await isFile(join(handle.batchPath, outputFile)),
+  }))));
   return { scannedAt: new Date().toISOString(), projects: projectData, generations, activity: await activityFrom(handles) };
 }
 
@@ -192,6 +194,7 @@ async function staticStudioData(emit: (sourcePath: string, fileName: string) => 
     })),
   })));
   const generations = await Promise.all(data.generations.map(async (generation) => {
+    if (!generation.available) return generation;
     const path = join(dirname(resolve(repositoryRoot, generation.metadataPath)), generation.outputFile);
     return { ...generation, imageUrl: await emit(path, staticAssetName(relative(repositoryRoot, path))) };
   }));

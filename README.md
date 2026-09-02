@@ -4,7 +4,7 @@ Figment is a clonable, agent-first creative lab for developing visual projects w
 
 The filesystem is the product memory. Projects are readable Markdown, JSON, and ordinary media files; Studio is a local visual surface over those files, not a second source of truth.
 
-> **Early alpha:** Figment is usable today, but its interfaces and project schemas may still evolve. Image generation is the supported media workflow; Studio is local-first, and published gallery builds are read-only. Keep valuable work in Git or another backup and inspect generated static builds before publishing them.
+> **Early alpha:** Figment is usable today, but its interfaces and project schemas may still evolve. Image generation is the supported media workflow, and Studio previews video outputs when a project contains them; Studio is local-first, and published gallery builds are read-only. Keep valuable work in Git or another backup and inspect generated static builds before publishing them.
 
 ## Why Figment?
 
@@ -70,9 +70,9 @@ pnpm lab projects
 pnpm studio
 ```
 
-Studio opens at `http://127.0.0.1:4173`. It provides project browsing, briefs, decisions, references, a filtered gallery, image lightbox, provenance, and review controls. Reviews are atomically written back to generation JSON, and project status can be changed between active, paused, complete, and archived without editing files by hand. Both actions provide visible saving, saved, or failed feedback. The interface supports system, light, and dark themes; the preference stays local to the browser.
+Studio opens at `http://127.0.0.1:4173`. It provides project browsing, briefs, decisions, references, a filtered gallery, a lightbox for images and video, provenance, and review controls. Reviews are atomically written back to generation JSON, and project status can be changed between active, paused, complete, and archived without editing files by hand. Both actions provide visible saving, saved, or failed feedback. The interface supports system, light, and dark themes; the preference stays local to the browser.
 
-The repository starts with an empty `projects/` directory. Studio branding lives independently under `apps/studio/public/`, so it does not add example project state to a new clone.
+The repository ships `projects/` holding nothing but its own README, so a fresh clone is a clean creative workspace. Studio branding lives independently under `apps/studio/public/`, so it does not add example project state to a new clone. The directory is deliberately not ignored: the creative history of your studio is yours to commit and push to your own remote, often a private one.
 
 Inside the lightbox, use the arrow keys to navigate and review without leaving the keyboard:
 
@@ -100,6 +100,8 @@ projects/2026/goob/
 Prototype folders appear in Studio with the rest of the project. A static prototype with an `index.html` can be previewed and opened immediately. Framework-based experiments remain independent: add a small `prototype.json` containing their localhost `url` and Studio will link to or embed the running prototype. See [`skills/prototype/SKILL.md`](skills/prototype/SKILL.md) for the optional manifest.
 
 Studio watches the project tree while it is running, so new generations, references, prototypes, and agent edits arrive without a page reload. A status light at the foot of the sidebar reports what the filesystem is doing. While a run is generating it turns amber and shows the batch's progress, and Studio holds the current view steady rather than reflowing the gallery under you; the light offers a button to pull finished shots in early if you would rather watch them land. When the run finishes, or when files change while nothing is generating, the new work is folded in quietly and the light returns to green. An abandoned run stops counting after its records go three minutes without a write, and review writes are excluded from the loop so keyboard grading stays uninterrupted.
+
+A generation whose file is not in the working copy still appears with its provenance intact, marked as not available locally and naming the file that is missing, so a studio that commits its records without every generated asset stays readable and the gallery reports how many outputs are absent. Copying the files back puts the artwork in place without a reload. Static builds skip assets that are not present rather than failing.
 
 ### Publish a gallery snapshot
 

@@ -272,8 +272,9 @@ function GalleryCard({ item, onOpen, onReview }: { item: StudioGeneration; onOpe
 function Media({ item, hoverPlay = false, autoPlay = false }: { item: StudioGeneration; hoverPlay?: boolean; autoPlay?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   // The scan reports what was on disk; a file can still vanish between the scan and the render.
+  // Each refresh hands down a fresh item, which clears the failure so a restored file is retried.
   const [failed, setFailed] = useState(false);
-  useEffect(() => { setFailed(false); }, [item.imageUrl]);
+  useEffect(() => { setFailed(false); }, [item]);
   if (!item.available || failed) return <MissingMedia item={item} />;
   if (item.mediaType !== "video") return <img src={item.imageUrl} alt={item.metadata.prompt} loading="lazy" onError={() => setFailed(true)} />;
   const play = () => { if (hoverPlay) void video.current?.play(); };

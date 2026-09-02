@@ -24,3 +24,23 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm studio:build
+
+  no-committed-projects:
+    # Figment is the public source repository, so creative work must never land here.
+    # This check is deliberately scoped to the upstream repository: a studio cloned from
+    # Figment is meant to commit its own projects and push them to its own remote, so the
+    # job is skipped everywhere else.
+    if: github.repository == 'jh3y/figment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Ensure no creative projects are committed
+        run: |
+          tracked=$(git ls-files projects/ | grep -vxE 'projects/(\.gitkeep|README\.md)' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Creative projects must not be committed to the Figment source repository. Keep them in your own clone."
+            printf '%s\n' "$tracked"
+            exit 1
+          fi
+          echo "No creative projects are tracked."

@@ -174,15 +174,17 @@ export default function App() {
         </span>
         <span>Figment</span>
       </div>
-      <button className={`project-row ${projectId === "all" ? "active" : ""}`} onClick={() => { setProjectId("all"); setView("gallery"); }}>
-        <span>All work</span><small>{data.generations.length}</small>
-      </button>
-      {groupYears(data.projects).map(([year, projects]) => <section className="year" key={year}>
-        <p>{year}</p>
-        {projects.map((project) => <button className={`project-row ${projectId === project.metadata.id ? "active" : ""}`} key={project.metadata.id} onClick={() => { setProjectId(project.metadata.id); setView("gallery"); }}>
-          <span>{project.metadata.title}</span><i className={`status ${project.metadata.status}`} title={`${friendlyStatus(project.metadata.status)} project`} />
-        </button>)}
-      </section>)}
+      <nav className="project-list" aria-label="Projects">
+        <button className={`project-row ${projectId === "all" ? "active" : ""}`} onClick={() => { setProjectId("all"); setView("gallery"); }}>
+          <span>All work</span><small>{data.generations.length}</small>
+        </button>
+        {groupYears(data.projects).map(([year, projects]) => <section className="year" key={year}>
+          <p>{year}</p>
+          {projects.map((project) => <button className={`project-row ${projectId === project.metadata.id ? "active" : ""}`} key={project.metadata.id} onClick={() => { setProjectId(project.metadata.id); setView("gallery"); }}>
+            <span>{project.metadata.title}</span><i className={`status ${project.metadata.status}`} title={`${friendlyStatus(project.metadata.status)} project`} />
+          </button>)}
+        </section>)}
+      </nav>
       <ThemeControl value={theme} onChange={setTheme} />
       <ActivityLight readOnly={Boolean(data.readOnly)} activity={activity} scannedAt={data.scannedAt} pending={pendingOutputs} stale={staleSnapshot} refreshing={refreshing} onRefresh={() => void refresh()} />
     </aside>
@@ -276,7 +278,7 @@ function Media({ item, hoverPlay = false, autoPlay = false }: { item: StudioGene
   const [failed, setFailed] = useState(false);
   useEffect(() => { setFailed(false); }, [item]);
   if (!item.available || failed) return <MissingMedia item={item} />;
-  if (item.mediaType !== "video") return <img src={item.imageUrl} alt={item.metadata.prompt} loading="lazy" onError={() => setFailed(true)} />;
+  if (item.mediaType !== "video") return <img src={item.imageUrl} alt={item.metadata.prompt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
   const play = () => { if (hoverPlay) void video.current?.play(); };
   const pause = () => { if (hoverPlay && video.current) { video.current.pause(); video.current.currentTime = 0; } };
   return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : "metadata"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} onError={() => setFailed(true)} />;

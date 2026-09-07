@@ -2,7 +2,8 @@ packages:
   - apps/*
   - packages/*
 
-# sharp resizes gallery art. Prebuilt binaries cover the common platforms, but pnpm 10 blocks
-# install scripts by default, and a fresh clone should not have to answer a prompt about it.
+# pnpm 10 blocks dependency install scripts by default, and a fresh clone should not open with a
+# prompt about them. sharp resizes gallery art; esbuild is Vite's bundler and predates it here.
 onlyBuiltDependencies:
+  - esbuild
   - sharp

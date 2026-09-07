@@ -183,9 +183,18 @@ details pre { overflow: auto; color: #aaa89f; font: 9px/1.6 ui-monospace, monosp
 .markdown p, .markdown li { color: var(--body-text); font-size: 12px; line-height: 1.75; }
 .markdown blockquote { margin: 18px 0; padding: 12px 16px; border-left: 2px solid var(--ink); background: var(--soft-bg); color: var(--body-text); font: 15px/1.55 Georgia, serif; }
 .reference-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 22px 12px; padding-top: 24px; }
-.reference-grid figure { margin: 0; }
-.reference-grid img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--artwork); }
+.reference-grid figure { margin: 0; content-visibility: auto; contain-intrinsic-size: auto 240px; }
+.reference-open { display: block; width: 100%; padding: 0; border: 0; background: var(--artwork); cursor: zoom-in; }
+.reference-open img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--artwork); transition: opacity .2s ease; }
+.reference-open:hover img, .reference-open:focus-visible img { opacity: .82; }
+.reference-open:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .reference-grid figcaption { padding: 8px 1px; color: var(--muted); font-family: ui-monospace, monospace; font-size: 9px; }
+.reference-lightbox { grid-template-columns: 40px minmax(0, 1fr) 40px; padding-bottom: 62px; }
+.reference-lightbox .lightbox-art img { max-height: calc(100dvh - 140px); }
+.reference-lightbox .previous[disabled], .reference-lightbox .next[disabled] { opacity: .25; cursor: default; }
+.reference-caption { position: absolute; right: 0; bottom: 18px; left: 0; display: grid; gap: 3px; justify-items: center; text-align: center; pointer-events: none; }
+.reference-caption strong { font-size: 12px; }
+.reference-caption small { color: #a5a29a; font-family: ui-monospace, monospace; font-size: 9px; }
 .prototype-browser { height: calc(100vh - 103px); margin: 0 -28px -60px; display: grid; grid-template-columns: 245px minmax(0, 1fr); }
 .prototype-list { min-height: 0; overflow: auto; padding: 20px 12px; border-right: 1px solid var(--line); }
 .prototype-intro { padding: 3px 8px 18px; }

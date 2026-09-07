@@ -1,4 +1,5 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -10,6 +11,54 @@ import { ProjectRepository, type GenerationHandle } from "../../packages/project
 const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const projectsRoot = resolve(process.env.FIGMENT_PROJECTS_DIR ?? join(repositoryRoot, "projects"));
 const repository = new ProjectRepository(projectsRoot);
+
+// Galleries render source art into ~225px cells. Decoding a 5504x3072 PNG to fill one costs ~65MB of
+// bitmap per card, so Studio serves a downscaled copy to the grid and keeps the original for the lightbox.
+const THUMBNAIL_WIDTH = 480;
+const THUMBNAIL_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".avif", ".gif", ".tif", ".tiff"]);
+const thumbnailRoot = join(repositoryRoot, ".cache", "thumbnails");
+const pendingThumbnails = new Map<string, Promise<Buffer | undefined>>();
+type Resizer = (input: string) => { rotate: () => { resize: (options: { width: number; withoutEnlargement: boolean }) => { webp: (options: { quality: number }) => { toBuffer: () => Promise<Buffer> } } } };
+let resizer: Resizer | null | undefined;
+
+// sharp is optional so Studio still installs on a platform without a prebuilt binary; without it the
+// grid falls back to full-size originals, which is slower to scroll but never broken.
+async function loadResizer(): Promise<Resizer | null> {
+  if (resizer !== undefined) return resizer;
+  try { resizer = (await import("sharp")).default as unknown as Resizer; }
+  catch {
+    resizer = null;
+    console.warn("[figment] sharp is not installed — Studio will serve full-size images to the gallery. Run `pnpm install` to restore fast scrolling.");
+  }
+  return resizer;
+}
+
+function isThumbnailable(path: string): boolean { return THUMBNAIL_EXTENSIONS.has(extname(path).toLowerCase()); }
+
+// Keyed by the source fingerprint, so an edited file lands on a different cache entry instead of a stale one.
+async function thumbnail(path: string, width: number, fingerprint: string): Promise<Buffer | undefined> {
+  const resize = await loadResizer();
+  if (!resize || !isThumbnailable(path)) return undefined;
+  const key = createHash("sha1").update(`${path}:${fingerprint}:${width}`).digest("hex");
+  const destination = join(thumbnailRoot, `${key}.webp`);
+  try { return await readFile(destination); } catch { /* Not generated yet. */ }
+  const inFlight = pendingThumbnails.get(destination);
+  if (inFlight) return inFlight;
+  const work = (async () => {
+    try {
+      await mkdir(thumbnailRoot, { recursive: true });
+      const buffer = await resize(path).rotate().resize({ width, withoutEnlargement: true }).webp({ quality: 78 }).toBuffer();
+      // Rename in from a temp file so a killed process cannot leave a truncated thumbnail behind.
+      const temporary = `${destination}.${process.pid}.tmp`;
+      await writeFile(temporary, buffer);
+      await rename(temporary, destination);
+      return buffer;
+    } catch { return undefined; }
+    finally { pendingThumbnails.delete(destination); }
+  })();
+  pendingThumbnails.set(destination, work);
+  return work;
+}
 
 export default defineConfig({
   plugins: [react(), filesystemApi()],
@@ -65,8 +114,24 @@ function filesystemApi(): Plugin {
             if (!path.startsWith(`${projectsRoot}${sep}`)) return json(response, { error: "Invalid file path" }, 403);
             const info = await stat(path);
             if (!info.isFile()) return json(response, { error: "Not found" }, 404);
+            const fingerprint = `${info.mtimeMs}-${info.size}`;
+            const width = Number(url.searchParams.get("w"));
+            if (Number.isFinite(width) && width > 0) {
+              const buffer = await thumbnail(path, Math.min(Math.round(width), 2048), fingerprint);
+              if (buffer) {
+                response.setHeader("Content-Type", "image/webp");
+                // The gallery asks for a URL carrying the source fingerprint, so this copy can never go stale.
+                response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+                response.end(buffer);
+                return;
+              }
+            }
+            // Originals stay revalidated rather than cached outright, but a 304 beats re-sending 19MB on every look.
+            const etag = `"${fingerprint}"`;
             response.setHeader("Content-Type", mimeType(path));
             response.setHeader("Cache-Control", "no-cache");
+            response.setHeader("ETag", etag);
+            if (request.headers["if-none-match"] === etag) { response.statusCode = 304; response.end(); return; }
             response.end(await readFile(path));
             return;
           }
@@ -80,9 +145,18 @@ function filesystemApi(): Plugin {
       });
     },
     async generateBundle() {
-      const data = await staticStudioData(async (sourcePath, fileName) => {
-        this.emitFile({ type: "asset", fileName, source: await readFile(sourcePath) });
+      const emitAsset = (fileName: string, source: Buffer) => {
+        this.emitFile({ type: "asset", fileName, source });
         return `./${fileName.split("/").map(encodeURIComponent).join("/")}`;
+      };
+      const data = await staticStudioData({
+        file: async (sourcePath, fileName) => emitAsset(fileName, await readFile(sourcePath)),
+        thumbnail: async (sourcePath, fileName) => {
+          const info = await fileInfo(sourcePath);
+          if (!info) return undefined;
+          const buffer = await thumbnail(sourcePath, THUMBNAIL_WIDTH, `${info.mtimeMs}-${info.size}`);
+          return buffer ? emitAsset(`${fileName}.w${THUMBNAIL_WIDTH}.webp`, buffer) : undefined;
+        },
       });
       this.emitFile({ type: "asset", fileName: "studio-data.json", source: JSON.stringify(data) });
     },
@@ -96,29 +170,34 @@ async function studioData() {
     metadata: project.metadata,
     brief: await repository.readMarkdown(project, "brief.md"),
     decisions: await repository.readMarkdown(project, "decisions.md"),
-    references: (await repository.references(project)).map(fileDescriptor),
+    references: await Promise.all((await repository.references(project)).map(fileDescriptor)),
     prototypes: await prototypeDescriptors(project.path, project.year, project.metadata.slug),
   })));
   const handles = await repository.generations();
   const numbers = await repository.shotNumbers();
   // Provenance may be committed without its generated assets, so the record can outlive the file it describes.
-  const generations = await Promise.all(handles.flatMap((handle) => handle.metadata.outputFiles.map(async (outputFile, outputIndex) => ({
-    projectId: handle.project.metadata.id,
-    projectSlug: handle.project.metadata.slug,
-    projectTitle: handle.project.metadata.title,
-    kind: handle.kind,
-    category: handle.manifest.category ?? legacyCategory(handle.manifest.purpose),
-    shotNumber: numbers.get(handle.metadataPath)!,
-    batchName: handle.batchPath.split(sep).at(-1),
-    manifest: handle.manifest,
-    metadata: handle.metadata,
-    metadataPath: relative(repositoryRoot, handle.metadataPath),
-    outputIndex,
-    outputFile,
-    imageUrl: fileUrl(join(handle.batchPath, outputFile)),
-    mediaType: isVideoFile(outputFile) ? "video" as const : "image" as const,
-    available: await isFile(join(handle.batchPath, outputFile)),
-  }))));
+  const generations = await Promise.all(handles.flatMap((handle) => handle.metadata.outputFiles.map(async (outputFile, outputIndex) => {
+    const outputPath = join(handle.batchPath, outputFile);
+    const info = await fileInfo(outputPath);
+    return {
+      projectId: handle.project.metadata.id,
+      projectSlug: handle.project.metadata.slug,
+      projectTitle: handle.project.metadata.title,
+      kind: handle.kind,
+      category: handle.manifest.category ?? legacyCategory(handle.manifest.purpose),
+      shotNumber: numbers.get(handle.metadataPath)!,
+      batchName: handle.batchPath.split(sep).at(-1),
+      manifest: handle.manifest,
+      metadata: handle.metadata,
+      metadataPath: relative(repositoryRoot, handle.metadataPath),
+      outputIndex,
+      outputFile,
+      imageUrl: fileUrl(outputPath),
+      thumbnailUrl: info && !isVideoFile(outputFile) ? thumbnailUrl(outputPath, info.mtimeMs, info.size) : undefined,
+      mediaType: isVideoFile(outputFile) ? "video" as const : "image" as const,
+      available: Boolean(info),
+    };
+  })));
   return { scannedAt: new Date().toISOString(), projects: projectData, generations, activity: await activityFrom(handles) };
 }
 
@@ -178,11 +257,21 @@ function legacyCategory(purpose: string): string {
   return "concepts";
 }
 
-async function staticStudioData(emit: (sourcePath: string, fileName: string) => Promise<string>) {
+interface StaticEmitter {
+  file: (sourcePath: string, fileName: string) => Promise<string>;
+  thumbnail: (sourcePath: string, fileName: string) => Promise<string | undefined>;
+}
+
+async function staticStudioData(emitter: StaticEmitter) {
+  const emit = emitter.file;
   const data = await studioData();
   const projects = await Promise.all(data.projects.map(async (project) => ({
     ...project,
-    references: await Promise.all(project.references.map(async (reference) => ({ ...reference, url: await emit(resolve(repositoryRoot, reference.path), staticAssetName(reference.path)) }))),
+    references: await Promise.all(project.references.map(async (reference) => {
+      const source = resolve(repositoryRoot, reference.path);
+      const fileName = staticAssetName(reference.path);
+      return { ...reference, url: await emit(source, fileName), thumbnailUrl: await emitter.thumbnail(source, fileName) };
+    })),
     prototypes: await Promise.all(project.prototypes.map(async (prototype) => {
       if (!prototype.entry || !prototype.launchUrl?.startsWith("/prototype-preview/")) return prototype;
       const root = resolve(repositoryRoot, prototype.path);
@@ -196,15 +285,27 @@ async function staticStudioData(emit: (sourcePath: string, fileName: string) => 
   const generations = await Promise.all(data.generations.map(async (generation) => {
     if (!generation.available) return generation;
     const path = join(dirname(resolve(repositoryRoot, generation.metadataPath)), generation.outputFile);
-    return { ...generation, imageUrl: await emit(path, staticAssetName(relative(repositoryRoot, path))) };
+    const fileName = staticAssetName(relative(repositoryRoot, path));
+    return { ...generation, imageUrl: await emit(path, fileName), thumbnailUrl: await emitter.thumbnail(path, fileName) };
   }));
   return { ...data, readOnly: true, activity: undefined, projects, generations };
 }
 
-function fileDescriptor(path: string) {
-  return { name: path.split(sep).at(-1), path: relative(repositoryRoot, path), url: fileUrl(path) };
+async function fileDescriptor(path: string) {
+  const info = await fileInfo(path);
+  return {
+    name: path.split(sep).at(-1),
+    path: relative(repositoryRoot, path),
+    url: fileUrl(path),
+    thumbnailUrl: info ? thumbnailUrl(path, info.mtimeMs, info.size) : undefined,
+  };
 }
 function fileUrl(path: string): string { return `/project-file?path=${encodeURIComponent(relative(repositoryRoot, path))}`; }
+// `v` is never read by the server; it only moves the URL when the file changes so the immutable copy expires.
+function thumbnailUrl(path: string, mtimeMs: number, size: number): string | undefined {
+  return isThumbnailable(path) ? `${fileUrl(path)}&w=${THUMBNAIL_WIDTH}&v=${Math.round(mtimeMs)}-${size}` : undefined;
+}
+async function fileInfo(path: string) { try { const info = await stat(path); return info.isFile() ? info : undefined; } catch { return undefined; } }
 function mimeType(path: string): string {
   return ({
     ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8",

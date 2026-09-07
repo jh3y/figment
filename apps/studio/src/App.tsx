@@ -266,22 +266,23 @@ function ActivityLight({ readOnly, activity, scannedAt, pending, stale, refreshi
 
 function GalleryCard({ item, onOpen, onReview }: { item: StudioGeneration; onOpen: () => void; onReview: (patch: ReviewPatch) => void }) {
   return <article className={`card ${item.metadata.review.signal === "reject" ? "rejected" : ""}`}>
-    <button className="artwork" onClick={onOpen}><Media item={item} hoverPlay /><span className="kind">{friendlyCategory(item.category)}</span><span className="shot-number">#{item.shotNumber}</span></button>
+    <button className="artwork" onClick={onOpen}><Media item={item} hoverPlay thumbnail /><span className="kind">{friendlyCategory(item.category)}</span><span className="shot-number">#{item.shotNumber}</span></button>
     <button className={`heart card-heart ${item.metadata.review.favourite ? "active" : ""}`} aria-label={`Favourite shot ${item.shotNumber}`} onClick={() => onReview(item.metadata.review.favourite ? clearDirection() : { favourite: true, signal: "unreviewed" })}>♥</button>
   </article>;
 }
 
-function Media({ item, hoverPlay = false, autoPlay = false }: { item: StudioGeneration; hoverPlay?: boolean; autoPlay?: boolean }) {
+function Media({ item, hoverPlay = false, autoPlay = false, thumbnail = false }: { item: StudioGeneration; hoverPlay?: boolean; autoPlay?: boolean; thumbnail?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   // The scan reports what was on disk; a file can still vanish between the scan and the render.
   // Each refresh hands down a fresh item, which clears the failure so a restored file is retried.
   const [failed, setFailed] = useState(false);
   useEffect(() => { setFailed(false); }, [item]);
   if (!item.available || failed) return <MissingMedia item={item} />;
-  if (item.mediaType !== "video") return <img src={item.imageUrl} alt={item.metadata.prompt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
+  // A grid cell is ~225px wide; handing it the source art costs tens of megabytes of bitmap per card.
+  if (item.mediaType !== "video") return <img src={(thumbnail && item.thumbnailUrl) || item.imageUrl} alt={item.metadata.prompt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
   const play = () => { if (hoverPlay) void video.current?.play(); };
   const pause = () => { if (hoverPlay && video.current) { video.current.pause(); video.current.currentTime = 0; } };
-  return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : "metadata"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} onError={() => setFailed(true)} />;
+  return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : "none"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} onError={() => setFailed(true)} />;
 }
 
 // The provenance is still here, so name the file that is missing rather than showing a broken image.
@@ -350,10 +351,10 @@ function GenerationReferences({ item, project, generations, onOpenGeneration }: 
       && normalPath(candidate.metadataPath).endsWith(`/${normalPath(source.metadataPath)}`)
       && candidate.outputFile === source.outputFile);
     const libraryReference = project?.references.find((candidate) => normalPath(candidate.path).endsWith(`/${normalPath(reference.localPath)}`));
-    const imageUrl = target?.imageUrl ?? libraryReference?.url;
+    const imageUrl = target?.thumbnailUrl ?? target?.imageUrl ?? libraryReference?.thumbnailUrl ?? libraryReference?.url;
     const label = source ? `Shot #${source.shotNumber}` : fileName(reference.localPath);
     const caption = source ? "Source generation" : "Reference file";
-    const content = <>{imageUrl ? <img src={imageUrl} alt={label} /> : <span className="reference-placeholder" aria-hidden="true">◫</span>}<span><strong>{label}</strong><small>{caption}</small></span></>;
+    const content = <>{imageUrl ? <img src={imageUrl} alt={label} loading="lazy" decoding="async" /> : <span className="reference-placeholder" aria-hidden="true">◫</span>}<span><strong>{label}</strong><small>{caption}</small></span></>;
     return target
       ? <button type="button" className="generation-reference" key={`${reference.localPath}-${source?.shotNumber ?? "file"}`} onClick={() => onOpenGeneration(target)} title={`Open ${label}`}>{content}</button>
       : <div className="generation-reference" key={`${reference.localPath}-${source?.shotNumber ?? "file"}`}>{content}</div>;
@@ -366,7 +367,50 @@ function DocumentView({ project }: { project: StudioProject }) {
 }
 
 function References({ project }: { project: StudioProject }) {
-  return project.references.length ? <div className="reference-grid">{project.references.map((reference) => <figure key={reference.path}><img src={reference.url} alt={reference.name} /><figcaption>{reference.name}</figcaption></figure>)}</div> : <div className="empty"><p className="eyebrow">Reference library</p><h2>No references yet.</h2><p>Place original images in <code>projects/{project.year}/{project.metadata.slug}/references/</code>. Figment will never modify them.</p></div>;
+  const [selected, setSelected] = useState<number>();
+  // Reopening the library after switching project should not restore an index that no longer exists.
+  useEffect(() => { setSelected(undefined); }, [project.metadata.id]);
+  if (!project.references.length) return <div className="empty"><p className="eyebrow">Reference library</p><h2>No references yet.</h2><p>Place original images in <code>projects/{project.year}/{project.metadata.slug}/references/</code>. Figment will never modify them.</p></div>;
+  return <>
+    <div className="reference-grid">{project.references.map((reference, index) => <figure key={reference.path}>
+      <button type="button" className="reference-open" onClick={() => setSelected(index)} title={`Inspect ${reference.name}`}>
+        <img src={reference.thumbnailUrl ?? reference.url} alt={reference.name} loading="lazy" decoding="async" />
+      </button>
+      <figcaption>{reference.name}</figcaption>
+    </figure>)}</div>
+    {selected !== undefined && project.references[selected] && <ReferenceLightbox
+      references={project.references}
+      position={selected}
+      onClose={() => setSelected(undefined)}
+      onMove={(step) => setSelected((selected + step + project.references.length) % project.references.length)}
+    />}
+  </>;
+}
+
+// References are source material, not generated work, so this inspects them and offers no review controls.
+function ReferenceLightbox({ references, position, onClose, onMove }: { references: StudioProject["references"]; position: number; onClose: () => void; onMove: (step: number) => void }) {
+  const reference = references[position]!;
+  const alone = references.length < 2;
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      const key = event.key.toLowerCase();
+      if (key === "escape") onClose();
+      else if (key === "arrowleft" && !alone) onMove(-1);
+      else if (key === "arrowright" && !alone) onMove(1);
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler);
+  }, [alone, onClose, onMove]);
+  return <div className="lightbox reference-lightbox" role="dialog" aria-modal="true" aria-label={reference.name} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <button className="close" onClick={onClose}>Close <span>×</span></button>
+    <button className="previous" aria-label="Previous reference" title="Previous · Left arrow" disabled={alone} onClick={() => onMove(-1)}>←</button>
+    <div className="lightbox-art"><img key={reference.path} src={reference.url} alt={reference.name} /></div>
+    <button className="next" aria-label="Next reference" title="Next · Right arrow" disabled={alone} onClick={() => onMove(1)}>→</button>
+    <figcaption className="reference-caption"><strong>{reference.name}</strong><small>Reference {position + 1} / {references.length} · original file, untouched</small></figcaption>
+  </div>;
 }
 
 function Prototypes({ project }: { project: StudioProject }) {

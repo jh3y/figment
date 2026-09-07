@@ -5,7 +5,7 @@ export interface StudioProject {
   metadata: ProjectMetadata;
   brief: string;
   decisions: string;
-  references: Array<{ name: string; path: string; url: string }>;
+  references: Array<{ name: string; path: string; url: string; thumbnailUrl?: string }>;
   prototypes: StudioPrototype[];
 }
 
@@ -34,6 +34,7 @@ export interface StudioGeneration {
   outputIndex: number;
   outputFile: string;
   imageUrl: string;
+  thumbnailUrl?: string;
   mediaType: "image" | "video";
   available: boolean;
 }

@@ -269,7 +269,7 @@ async function staticStudioData(emitter: StaticEmitter) {
     ...project,
     references: await Promise.all(project.references.map(async (reference) => {
       const source = resolve(repositoryRoot, reference.path);
-      const fileName = staticAssetName(reference.path);
+      const fileName = staticAssetName(source);
       return { ...reference, url: await emit(source, fileName), thumbnailUrl: await emitter.thumbnail(source, fileName) };
     })),
     prototypes: await Promise.all(project.prototypes.map(async (prototype) => {
@@ -285,7 +285,7 @@ async function staticStudioData(emitter: StaticEmitter) {
   const generations = await Promise.all(data.generations.map(async (generation) => {
     if (!generation.available) return generation;
     const path = join(dirname(resolve(repositoryRoot, generation.metadataPath)), generation.outputFile);
-    const fileName = staticAssetName(relative(repositoryRoot, path));
+    const fileName = staticAssetName(path);
     return { ...generation, imageUrl: await emit(path, fileName), thumbnailUrl: await emitter.thumbnail(path, fileName) };
   }));
   return { ...data, readOnly: true, activity: undefined, projects, generations };
@@ -375,7 +375,16 @@ async function filesUnder(root: string): Promise<string[]> {
   }
   return results;
 }
-function staticAssetName(path: string): string { return `project-assets/${path.split(sep).join("/")}`; }
+// Named against the projects root rather than the repository, because FIGMENT_PROJECTS_DIR may point
+// outside the checkout; naming against the repository there yields ".." segments that Rollup refuses to
+// emit, which failed the whole build. The "projects/" prefix keeps output paths unchanged for the default
+// layout. Anything that somehow sits outside the projects root falls back to a flat, collision-free name.
+function staticAssetName(absolutePath: string): string {
+  const name = inside(projectsRoot, absolutePath)
+    ? relative(projectsRoot, absolutePath).split(sep).join("/")
+    : `${createHash("sha1").update(absolutePath).digest("hex")}${extname(absolutePath)}`;
+  return `project-assets/projects/${name}`;
+}
 function inside(root: string, path: string): boolean { const value = relative(root, path); return value === "" || (!value.startsWith(`..${sep}`) && value !== ".." && !isAbsolute(value)); }
 function safePrototypeEntry(value: string): string | undefined { const normalized = value.trim(); if (!normalized) return undefined; const path = resolve("/prototype", normalized); return inside("/prototype", path) ? relative("/prototype", path) : undefined; }
 function safePrototypeUrl(value?: string): string | undefined {

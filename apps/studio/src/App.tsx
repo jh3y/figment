@@ -28,6 +28,7 @@ export default function App() {
   const [projectSave, setProjectSave] = useState<ReviewSaveState>("idle");
   const [liveActivity, setLiveActivity] = useState<StudioActivity>();
   const [refreshing, setRefreshing] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const refreshingRef = useRef(false);
   const [theme, setTheme] = useState<ThemePreference>(() => {
     const saved = localStorage.getItem("figment-theme");
@@ -64,6 +65,12 @@ export default function App() {
     if (!data.projects.some((project) => project.metadata.id === projectId)) { setProjectId("all"); setView("gallery"); }
   }, [data, projectId, view]);
   useEffect(() => { setProjectSave("idle"); }, [projectId]);
+  useEffect(() => { setSidebarOpen(false); }, [projectId, view]);
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const handler = (event: KeyboardEvent) => { if (event.key === "Escape") setSidebarOpen(false); };
+    window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler);
+  }, [sidebarOpen]);
   async function fetchStudioData(): Promise<StudioData> {
     for (const endpoint of ["/api/studio", "./studio-data.json"]) {
       const response = await fetch(endpoint);
@@ -165,8 +172,9 @@ export default function App() {
   if (error) return <main className="state"><p className="eyebrow">Figment Studio</p><h1>Couldn’t open the lab.</h1><p>{error}</p></main>;
   if (!data) return <main className="state"><p className="eyebrow">Figment Studio</p><h1>Opening the lab…</h1></main>;
 
-  return <div className={`shell ${data.readOnly ? "read-only" : ""}`}>
-    <aside className="sidebar">
+  return <div className={`shell ${data.readOnly ? "read-only" : ""} ${sidebarOpen ? "sidebar-open" : ""}`}>
+    <button type="button" className="sidebar-scrim" tabIndex={-1} aria-hidden="true" onClick={() => setSidebarOpen(false)} />
+    <aside className="sidebar" id="studio-sidebar">
       <div className="brand">
         <span className="brand-mark" tabIndex={0} aria-label="Fig, the Figment mascot">
           <img className="brand-avatar brand-avatar-default" src="./fig-avatar.png" alt="" />
@@ -190,45 +198,51 @@ export default function App() {
     </aside>
 
     <main className="workspace">
-      <header className="topbar">
-        <div>
-          <div className="project-context">
-            <p className="eyebrow">{activeProject ? activeProject.year : "Creative archive"}</p>
-            {activeProject && <>
-              <label className="project-status-control" title="Project status">
-                <i className={`status ${activeProject.metadata.status}`} aria-hidden="true" />
-                <select aria-label={`Status for ${activeProject.metadata.title}`} value={activeProject.metadata.status} disabled={data.readOnly || projectSave === "saving"} onChange={(event) => void updateProjectStatus(activeProject, event.target.value as ProjectStatus)}>
-                  <option value="active">Active</option>
-                  <option value="paused">Paused</option>
-                  <option value="complete">Complete</option>
-                  <option value="archived">Archived</option>
-                </select>
-              </label>
-              <span className={`project-save ${projectSave}`} role="status" aria-live="polite">{projectSave === "saving" ? "Saving…" : projectSave === "saved" ? "Saved" : projectSave === "error" ? "Couldn’t save" : ""}</span>
-            </>}
+      <div className="workspace-header">
+        <header className="topbar">
+          <div>
+            <button type="button" className="sidebar-toggle" aria-expanded={sidebarOpen} aria-controls="studio-sidebar" onClick={() => setSidebarOpen((current) => !current)}>
+              <span aria-hidden="true">☰</span> Projects
+            </button>
+            <div className="project-context">
+              <p className="eyebrow">{activeProject ? activeProject.year : "Creative archive"}</p>
+              {activeProject && <>
+                <label className="project-status-control" title="Project status">
+                  <i className={`status ${activeProject.metadata.status}`} aria-hidden="true" />
+                  <select aria-label={`Status for ${activeProject.metadata.title}`} value={activeProject.metadata.status} disabled={data.readOnly || projectSave === "saving"} onChange={(event) => void updateProjectStatus(activeProject, event.target.value as ProjectStatus)}>
+                    <option value="active">Active</option>
+                    <option value="paused">Paused</option>
+                    <option value="complete">Complete</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </label>
+                <span className={`project-save ${projectSave}`} role="status" aria-live="polite">{projectSave === "saving" ? "Saving…" : projectSave === "saved" ? "Saved" : projectSave === "error" ? "Couldn’t save" : ""}</span>
+              </>}
+            </div>
+            <h1>{activeProject?.metadata.title ?? "All work"}</h1>
           </div>
-          <h1>{activeProject?.metadata.title ?? "All work"}</h1>
-        </div>
-        <nav>
-          {data.readOnly && <span className="snapshot-badge" title="This published build cannot write back to project files">Published snapshot</span>}
-          <button className={view === "gallery" ? "active" : ""} onClick={() => setView("gallery")}>Gallery</button>
-          {activeProject && <button className={view === "brief" ? "active" : ""} onClick={() => setView("brief")}>Brief</button>}
-          {activeProject && <button className={view === "references" ? "active" : ""} onClick={() => setView("references")}>References</button>}
-          {activeProject && <button className={view === "prototypes" ? "active" : ""} onClick={() => setView("prototypes")}>Prototypes</button>}
-        </nav>
-      </header>
+          <nav>
+            {data.readOnly && <span className="snapshot-badge" title="This published build cannot write back to project files">Published snapshot</span>}
+            <button className={view === "gallery" ? "active" : ""} onClick={() => setView("gallery")}>Gallery</button>
+            {activeProject && <button className={view === "brief" ? "active" : ""} onClick={() => setView("brief")}>Brief</button>}
+            {activeProject && <button className={view === "references" ? "active" : ""} onClick={() => setView("references")}>References</button>}
+            {activeProject && <button className={view === "prototypes" ? "active" : ""} onClick={() => setView("prototypes")}>Prototypes</button>}
+          </nav>
+        </header>
+
+        {view === "gallery" && <div className="filters">
+            <Select label="Category" value={category} options={categories} onChange={setCategory} />
+            <Select label="Model" value={model} options={models} onChange={setModel} />
+            <Select label="Batch" value={batch} options={batches} onChange={setBatch} />
+            <Select label="Review" value={review} options={["favourite", "shortlist", "reject", "unreviewed"]} onChange={setReview} />
+            {tags.length > 0 && <Select label="Tag" value={tag} options={tags} onChange={setTag} />}
+            <button className={`rejected-toggle ${showRejected ? "active" : ""}`} type="button" aria-pressed={showRejected} onClick={() => setShowRejected((current) => !current)}>{showRejected ? "Hide rejected" : "Show rejected"}</button>
+            <span className="count">{visible.length} {visible.length === 1 ? "output" : "outputs"}</span>
+            {missingVisible > 0 && <span className="count missing" title="These generations are recorded, but their files are not in this working copy">{missingVisible} not available locally</span>}
+          </div>}
+      </div>
 
       {view === "gallery" && <>
-        <div className="filters">
-          <Select label="Category" value={category} options={categories} onChange={setCategory} />
-          <Select label="Model" value={model} options={models} onChange={setModel} />
-          <Select label="Batch" value={batch} options={batches} onChange={setBatch} />
-          <Select label="Review" value={review} options={["favourite", "shortlist", "reject", "unreviewed"]} onChange={setReview} />
-          {tags.length > 0 && <Select label="Tag" value={tag} options={tags} onChange={setTag} />}
-          <button className={`rejected-toggle ${showRejected ? "active" : ""}`} type="button" aria-pressed={showRejected} onClick={() => setShowRejected((current) => !current)}>{showRejected ? "Hide rejected" : "Show rejected"}</button>
-          <span className="count">{visible.length} {visible.length === 1 ? "output" : "outputs"}</span>
-          {missingVisible > 0 && <span className="count missing" title="These generations are recorded, but their files are not in this working copy">{missingVisible} not available locally</span>}
-        </div>
         {visible.length ? <div className="gallery">{visible.map((item, index) => <GalleryCard item={item} key={`${item.metadataPath}-${item.outputIndex}`} onOpen={() => { setLightboxItems(visible); setSelected(index); }} onReview={(patch) => void patchReview(item, patch)} />)}</div>
           : <Empty hasProjects={data.projects.length > 0} />}
       </>}
@@ -294,6 +308,30 @@ function MissingMedia({ item }: { item: StudioGeneration }) {
   </span>;
 }
 
+// Both lightboxes share this shell so the art stays centred and the panel behaves the same in each.
+function LightboxShell({ ariaLabel, onClose, onMove, canMove = true, art, details }: { ariaLabel?: string; onClose: () => void; onMove: (step: number) => void; canMove?: boolean; art: React.ReactNode; details: React.ReactNode }) {
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      const key = event.key.toLowerCase();
+      if (key === "escape") onClose();
+      else if (key === "arrowleft" && canMove) onMove(-1);
+      else if (key === "arrowright" && canMove) onMove(1);
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler);
+  }, [canMove, onClose, onMove]);
+  return <div className="lightbox" role="dialog" aria-modal="true" aria-label={ariaLabel} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <button className="close" onClick={onClose}>Close <span>×</span></button>
+    <button className="previous" aria-label="Previous" title="Previous · Left arrow" disabled={!canMove} onClick={() => onMove(-1)}>←</button>
+    <div className="lightbox-art">{art}</div>
+    <button className="next" aria-label="Next" title="Next · Right arrow" disabled={!canMove} onClick={() => onMove(1)}>→</button>
+    <aside className="details">{details}</aside>
+  </div>;
+}
+
 function Lightbox({ item, project, generations, position, total, saveState, onClose, onMove, onReview, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onOpenGeneration: (item: StudioGeneration) => void }) {
   const [note, setNote] = useState(item.metadata.review.note ?? "");
   const [tags, setTags] = useState(item.metadata.review.tags.join(", "));
@@ -302,25 +340,19 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
       const target = event.target;
       if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
       const key = event.key.toLowerCase();
-      if (key === "escape") onClose();
-      else if (key === "arrowleft") onMove(-1);
-      else if (key === "arrowright") onMove(1);
-      else if (key === "1") onReview(item.metadata.review.favourite ? clearDirection() : { favourite: true, signal: "unreviewed" });
+      if (key === "1") onReview(item.metadata.review.favourite ? clearDirection() : { favourite: true, signal: "unreviewed" });
       else if (key === "2") onReview(item.metadata.review.signal === "shortlist" ? clearDirection() : { favourite: false, signal: "shortlist" });
       else if (key === "3") onReview(item.metadata.review.signal === "reject" ? clearDirection() : { favourite: false, signal: "reject" });
       else return;
       event.preventDefault();
     };
     window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler);
-  }, [item.metadata.review, onClose, onMove, onReview]);
+  }, [item.metadata.review, onReview]);
   useEffect(() => { setNote(item.metadata.review.note ?? ""); setTags(item.metadata.review.tags.join(", ")); }, [item]);
   const cost = item.metadata.actualCost ?? item.metadata.estimatedCost;
-  return <div className="lightbox" role="dialog" aria-modal="true">
-    <button className="close" onClick={onClose}>Close <span>×</span></button>
-    <button className="previous" aria-label="Previous image" title="Previous · Left arrow" onClick={() => onMove(-1)}>←</button>
-    <div className="lightbox-art"><Media key={`${item.metadataPath}-${item.outputFile}`} item={item} autoPlay /></div>
-    <button className="next" aria-label="Next image" title="Next · Right arrow" onClick={() => onMove(1)}>→</button>
-    <aside className="details">
+  return <LightboxShell ariaLabel={`Shot ${item.shotNumber}`} onClose={onClose} onMove={onMove} canMove={total > 1}
+    art={<Media key={`${item.metadataPath}-${item.outputFile}`} item={item} autoPlay />}
+    details={<>
       <p className="eyebrow">Shot #{item.shotNumber} · {friendlyCategory(item.category)} · {position + 1} / {total}</p>
       <h2>{item.projectTitle}</h2>
       <div className="review-guide">
@@ -340,8 +372,8 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
       {item.metadata.references.length > 0 && <GenerationReferences item={item} project={project} generations={generations} onOpenGeneration={onOpenGeneration} />}
       {item.metadata.parentGenerationId && <Detail label="Lineage"><p>Derived from {item.metadata.parentGenerationId}</p></Detail>}
       <details><summary>Parameters & provenance</summary><pre>{JSON.stringify({ batch: item.batchName, jobId: item.metadata.jobId, parameters: item.metadata.parameters, references: item.metadata.references, provider: item.metadata.provider }, null, 2)}</pre></details>
-    </aside>
-  </div>;
+    </>}
+  />;
 }
 
 function GenerationReferences({ item, project, generations, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; onOpenGeneration: (item: StudioGeneration) => void }) {
@@ -387,30 +419,18 @@ function References({ project }: { project: StudioProject }) {
   </>;
 }
 
-// References are source material, not generated work, so this inspects them and offers no review controls.
+// References are source material, not generated work, so this reuses the shell without review controls.
 function ReferenceLightbox({ references, position, onClose, onMove }: { references: StudioProject["references"]; position: number; onClose: () => void; onMove: (step: number) => void }) {
   const reference = references[position]!;
-  const alone = references.length < 2;
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      const target = event.target;
-      if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
-      const key = event.key.toLowerCase();
-      if (key === "escape") onClose();
-      else if (key === "arrowleft" && !alone) onMove(-1);
-      else if (key === "arrowright" && !alone) onMove(1);
-      else return;
-      event.preventDefault();
-    };
-    window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler);
-  }, [alone, onClose, onMove]);
-  return <div className="lightbox reference-lightbox" role="dialog" aria-modal="true" aria-label={reference.name} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <button className="close" onClick={onClose}>Close <span>×</span></button>
-    <button className="previous" aria-label="Previous reference" title="Previous · Left arrow" disabled={alone} onClick={() => onMove(-1)}>←</button>
-    <div className="lightbox-art"><img key={reference.path} src={reference.url} alt={reference.name} /></div>
-    <button className="next" aria-label="Next reference" title="Next · Right arrow" disabled={alone} onClick={() => onMove(1)}>→</button>
-    <figcaption className="reference-caption"><strong>{reference.name}</strong><small>Reference {position + 1} / {references.length} · original file, untouched</small></figcaption>
-  </div>;
+  return <LightboxShell ariaLabel={reference.name} onClose={onClose} onMove={onMove} canMove={references.length > 1}
+    art={<img key={reference.path} src={reference.url} alt={reference.name} />}
+    details={<>
+      <p className="eyebrow">Reference · {position + 1} / {references.length}</p>
+      <h2>{reference.name}</h2>
+      <div className="review-guide"><p>Original source material. Figment never modifies the reference library.</p></div>
+      <Detail label="Location"><p className="prompt">{reference.path}</p></Detail>
+    </>}
+  />;
 }
 
 function Prototypes({ project }: { project: StudioProject }) {

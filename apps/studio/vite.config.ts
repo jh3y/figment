@@ -193,8 +193,8 @@ async function studioData() {
       outputIndex,
       outputFile,
       imageUrl: fileUrl(outputPath),
-      thumbnailUrl: info && !isVideoFile(outputFile) ? thumbnailUrl(outputPath, info.mtimeMs, info.size) : undefined,
-      mediaType: isVideoFile(outputFile) ? "video" as const : "image" as const,
+      thumbnailUrl: info && !isVideoFile(outputFile) && !isModelFile(outputFile) ? thumbnailUrl(outputPath, info.mtimeMs, info.size) : undefined,
+      mediaType: mediaTypeFor(outputFile),
       available: Boolean(info),
     };
   })));
@@ -246,6 +246,14 @@ async function writtenRecently(paths: string[]): Promise<boolean> {
   return false;
 }
 function isVideoFile(path: string): boolean { return [".mp4", ".webm", ".ogv", ".mov"].includes(extname(path).toLowerCase()); }
+// A mesh cannot be thumbnailed by sharp and must not be handed to an <img>, so it
+// gets its own media type rather than falling through to the image branch.
+function isModelFile(path: string): boolean { return [".glb", ".gltf"].includes(extname(path).toLowerCase()); }
+function mediaTypeFor(path: string): "image" | "video" | "model" {
+  if (isVideoFile(path)) return "video";
+  if (isModelFile(path)) return "model";
+  return "image";
+}
 
 function legacyCategory(purpose: string): string {
   const value = purpose.toLowerCase();
@@ -311,6 +319,7 @@ function mimeType(path: string): string {
     ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8",
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".avif": "image/avif", ".heic": "image/heic", ".svg": "image/svg+xml",
     ".ico": "image/x-icon", ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime", ".ogv": "video/ogg",
+    ".glb": "model/gltf-binary", ".gltf": "model/gltf+json",
   } as Record<string, string>)[extname(path).toLowerCase()] ?? "application/octet-stream";
 }
 

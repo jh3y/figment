@@ -292,11 +292,51 @@ function Media({ item, hoverPlay = false, autoPlay = false, thumbnail = false }:
   const [failed, setFailed] = useState(false);
   useEffect(() => { setFailed(false); }, [item]);
   if (!item.available || failed) return <MissingMedia item={item} />;
+  // A mesh is tens of megabytes and needs WebGL. Grid cells show a marker instead, so
+  // scrolling a project full of meshes never downloads or renders any of them.
+  if (item.mediaType === "model") return thumbnail ? <ModelMarker /> : <ModelViewer item={item} onError={() => setFailed(true)} />;
   // A grid cell is ~225px wide; handing it the source art costs tens of megabytes of bitmap per card.
   if (item.mediaType !== "video") return <img src={(thumbnail && item.thumbnailUrl) || item.imageUrl} alt={item.metadata.prompt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
   const play = () => { if (hoverPlay) void video.current?.play(); };
   const pause = () => { if (hoverPlay && video.current) { video.current.pause(); video.current.currentTime = 0; } };
   return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : "none"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} onError={() => setFailed(true)} />;
+}
+
+function ModelMarker() {
+  return <span className="media-model-marker" role="img" aria-label="3D model">
+    <span className="media-model-mark" aria-hidden="true">◈</span>
+    <small>3D model</small>
+  </span>;
+}
+
+// model-viewer is a heavy web component and most projects hold no meshes at all, so it
+// is imported the first time one is actually opened rather than bundled into the gallery.
+let modelViewerLoad: Promise<unknown> | undefined;
+function loadModelViewer(): Promise<unknown> {
+  modelViewerLoad ??= import("@google/model-viewer");
+  return modelViewerLoad;
+}
+
+function ModelViewer({ item, onError }: { item: StudioGeneration; onError: () => void }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    loadModelViewer().then(() => { if (live) setReady(true); }).catch(() => { if (live) onError(); });
+    return () => { live = false; };
+  }, [item.imageUrl]);
+
+  if (!ready) return <span className="media-model-marker" role="status"><span className="media-model-mark" aria-hidden="true">◈</span><small>Loading 3D…</small></span>;
+  return <model-viewer
+    className="media-model"
+    src={item.imageUrl}
+    alt={item.metadata.prompt}
+    camera-controls
+    auto-rotate
+    rotation-per-second="18deg"
+    interaction-prompt="none"
+    shadow-intensity="0.6"
+    exposure="1"
+  />;
 }
 
 // The provenance is still here, so name the file that is missing rather than showing a broken image.

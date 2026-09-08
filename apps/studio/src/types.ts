@@ -35,7 +35,7 @@ export interface StudioGeneration {
   outputFile: string;
   imageUrl: string;
   thumbnailUrl?: string;
-  mediaType: "image" | "video";
+  mediaType: "image" | "video" | "model";
   available: boolean;
 }
 
@@ -63,4 +63,23 @@ export interface StudioData {
   projects: StudioProject[];
   generations: StudioGeneration[];
   activity?: StudioActivity;
+}
+
+// model-viewer is a custom element, so JSX needs to be told it exists. Only the
+// attributes Studio actually sets are declared.
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "model-viewer": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
+        src?: string;
+        alt?: string;
+        "camera-controls"?: boolean;
+        "auto-rotate"?: boolean;
+        "rotation-per-second"?: string;
+        "interaction-prompt"?: string;
+        "shadow-intensity"?: string;
+        exposure?: string;
+      };
+    }
+  }
 }

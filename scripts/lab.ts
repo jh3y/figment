@@ -2,7 +2,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
-import { compactId, safeSlug, writeJson, type BatchManifest, type CostRecord, type GenerationRecord, type ReferenceRecord } from "@figment/core";
+import { compactId, extensionFor, safeSlug, writeJson, type BatchManifest, type CostRecord, type GenerationRecord, type ReferenceRecord } from "@figment/core";
 import { bareModelId, KreaAdapter, ModelCatalog, type KreaJob } from "@figment/krea";
 import { ProjectRepository, type GenerationHandle, type ProjectHandle } from "@figment/project";
 
@@ -235,7 +235,7 @@ async function finishGeneration(client: KreaAdapter, batchPath: string, record: 
       record.width = dimensions.width;
       record.height = dimensions.height;
     }
-    const extension = extensionFor(result.contentType);
+    const extension = extensionFor(result.contentType, url);
     const filename = `${record.id}${index ? `-${String(index + 1).padStart(2, "0")}` : ""}.${extension}`;
     const destination = join(batchPath, filename);
     const temporary = `${destination}.${process.pid}.tmp`;
@@ -378,13 +378,6 @@ function jsonArg(name: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`--${name} must be a JSON object.`);
   return value as Record<string, unknown>;
 }
-function extensionFor(contentType?: string): string {
-  return ({
-    "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif",
-    "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "video/ogg": "ogv",
-  } as Record<string, string>)[contentType ?? ""] ?? "png";
-}
-
 function pngDimensions(bytes: Uint8Array, contentType?: string): { width: number; height: number } | undefined {
   if (contentType !== "image/png" || bytes.length < 24) return undefined;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);

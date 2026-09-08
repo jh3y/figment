@@ -140,8 +140,9 @@ function normalizeJob(value: unknown): KreaJob {
   const result = objectValue(raw.result) ?? objectValue(envelope.data);
   const error = objectValue(raw.error) ?? objectValue(result?.error);
   const urls = [raw.urls, result?.urls, result?.url]
-    .flatMap((candidate) => Array.isArray(candidate) ? candidate : typeof candidate === "string" ? [candidate] : [])
-    .map(String);
+    .flatMap((candidate) => Array.isArray(candidate) ? candidate : candidate === undefined ? [] : [candidate])
+    .map(outputUrl)
+    .filter((url): url is string => url !== undefined);
   const amount = numberValue(raw.cost_usd) ?? numberValue(result?.cost_usd) ?? microdollars(raw.cost_microdollars);
   return {
     jobId: String(raw.job_id ?? raw.id ?? envelope.requestId ?? ""),
@@ -158,6 +159,15 @@ function normalizeJob(value: unknown): KreaJob {
     error: error ? { code: stringValue(error.code), message: String(error.message ?? "Krea job failed") } : undefined,
     raw: value,
   };
+}
+
+// Image and video jobs report bare URL strings, but 3D jobs return typed entries
+// such as { type: "model", url } alongside { type: "preview", url }. Both shapes
+// are unwrapped so every output a model produces is downloaded.
+function outputUrl(candidate: unknown): string | undefined {
+  if (typeof candidate === "string") return candidate;
+  const url = stringValue(objectValue(candidate)?.url);
+  return url;
 }
 
 function unwrapArray(value: unknown): unknown[] {

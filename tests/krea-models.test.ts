@@ -62,3 +62,32 @@ describe("KreaAdapter.resolveEndpoint", () => {
     await expect(adapter.resolveEndpoint("vendor/mystery")).rejects.toThrow(/did not report an endpoint for "vendor\/mystery"/);
   });
 });
+
+// A 3D job answers with typed entries rather than the bare URL strings image and
+// video jobs return, so the mesh URL used to arrive as "[object Object]".
+function adapterWithJob(job: unknown) {
+  const adapter = new KreaAdapter("test-token");
+  (adapter as unknown as { client: unknown }).client = { jobs: { get: async () => job } };
+  return adapter;
+}
+
+describe("job outputs", () => {
+  it("unwraps typed output entries from a 3D job", async () => {
+    const adapter = adapterWithJob({
+      job_id: "abc", status: "completed",
+      result: { urls: [{ type: "model", url: "https://krea.test/mesh.glb" }, { type: "preview", url: "https://krea.test/preview.png" }] },
+    });
+    const job = await adapter.getJob("abc");
+    expect(job.urls).toEqual(["https://krea.test/mesh.glb", "https://krea.test/preview.png"]);
+  });
+
+  it("still reads the bare URL strings an image job returns", async () => {
+    const adapter = adapterWithJob({ job_id: "abc", status: "completed", result: { urls: ["https://krea.test/one.png"] } });
+    expect((await adapter.getJob("abc")).urls).toEqual(["https://krea.test/one.png"]);
+  });
+
+  it("drops entries carrying no usable url", async () => {
+    const adapter = adapterWithJob({ job_id: "abc", status: "completed", result: { urls: [{ type: "model" }, 7, null, "https://krea.test/ok.glb"] } });
+    expect((await adapter.getJob("abc")).urls).toEqual(["https://krea.test/ok.glb"]);
+  });
+});

@@ -21,22 +21,47 @@ export interface KreaJob {
   raw: unknown;
 }
 
+type ModelListFilters = NonNullable<Parameters<InstanceType<typeof Krea>["models"]["list"]>[0]>;
+
 export class KreaAdapter {
   private readonly client: InstanceType<typeof Krea>;
+  private readonly endpoints = new Map<string, string>();
 
   constructor(apiKey = process.env.KREA_API_KEY) {
     if (!apiKey) throw new Error("KREA_API_KEY is not set. Copy .env.example to .env and add a Krea API token.");
     this.client = new Krea({ apiKey, baseUrl: process.env.KREA_API_BASE_URL });
   }
 
-  async listImageModels(): Promise<ModelSummary[]> {
-    const response = await this.client.models.list({ category: "image" });
+  // Krea serves image, video, audio, 3d and enhance models. Passing no category
+  // returns every one of them; a category narrows the list without Figment having
+  // to know which categories exist.
+  async listModels(category?: string): Promise<ModelSummary[]> {
+    // The SDK types this union as image | video | enhance while the live API also
+    // serves audio and 3d, so the caller's category is passed straight through
+    // rather than re-declaring a taxonomy Krea can extend at any time.
+    const filters = (category ? { category } : {}) as ModelListFilters;
+    const response = await this.client.models.list(filters);
     const rawModels = unwrapArray(response);
     return rawModels.map(normalizeModel).filter((model) => model.id.length > 0);
   }
 
   async getModelSchema(model: string): Promise<unknown> {
-    return this.client.models.getSchema(stripCategory(model));
+    return this.client.models.getSchema(bareModelId(model));
+  }
+
+  // A model id is "vendor/model" but generation posts to "category/vendor/model".
+  // The category comes from the live schema rather than an assumption, so a video
+  // or audio model submits exactly like an image one.
+  async resolveEndpoint(model: string): Promise<string> {
+    if (model.split("/").length >= 3) return model;
+    const cached = this.endpoints.get(model);
+    if (cached) return cached;
+    const schema = (await this.getModelSchema(model) ?? {}) as { endpointPath?: unknown; category?: unknown };
+    const endpoint = stringValue(schema.endpointPath)
+      ?? (stringValue(schema.category) ? `${stringValue(schema.category)}/${model}` : undefined);
+    if (!endpoint) throw new Error(`Krea did not report an endpoint for "${model}". Inspect \`pnpm lab models --schema ${model}\`.`);
+    this.endpoints.set(model, endpoint);
+    return endpoint;
   }
 
   async upload(path: string, description?: string): Promise<KreaAsset> {
@@ -55,7 +80,7 @@ export class KreaAdapter {
   }
 
   async submit(model: string, input: Record<string, unknown>): Promise<KreaJob> {
-    const raw = await this.client.generateRaw(ensureCategory(model), input);
+    const raw = await this.client.generateRaw(await this.resolveEndpoint(model), input);
     return normalizeJob(raw);
   }
 
@@ -142,12 +167,11 @@ function unwrapArray(value: unknown): unknown[] {
   return [];
 }
 
-function ensureCategory(model: string): string {
-  return model.startsWith("image/") ? model : `image/${model}`;
-}
-
-function stripCategory(model: string): string {
-  return model.replace(/^image\//, "");
+// Schema lookups take the bare "vendor/model" id, so drop a leading category
+// segment when an endpoint path is passed in instead.
+export function bareModelId(model: string): string {
+  const parts = model.split("/");
+  return parts.length >= 3 ? parts.slice(1).join("/") : model;
 }
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {

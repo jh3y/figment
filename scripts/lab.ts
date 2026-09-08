@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import process from "node:process";
 import { compactId, safeSlug, writeJson, type BatchManifest, type CostRecord, type GenerationRecord, type ReferenceRecord } from "@figment/core";
-import { KreaAdapter, ModelCatalog, type KreaJob } from "@figment/krea";
+import { bareModelId, KreaAdapter, ModelCatalog, type KreaJob } from "@figment/krea";
 import { ProjectRepository, type GenerationHandle, type ProjectHandle } from "@figment/project";
 
 try {
@@ -63,9 +63,14 @@ async function listModels(): Promise<void> {
     return;
   }
   const cache = await new ModelCatalog().get({ refresh: booleanArg("refresh") });
-  output(cache, [
-    `Krea image models — refreshed ${cache.refreshedAt}`,
-    ...cache.models.map((item) => `${item.id}${item.price ? `  ~$${item.price.amount.toFixed(3)}` : "  cost unavailable"}${item.description ? `  ${item.description}` : ""}`),
+  const category = stringArg("category");
+  const models = category ? cache.models.filter((item) => item.category === category) : cache.models;
+  const categories = [...new Set(cache.models.map((item) => item.category).filter(Boolean))].join(", ");
+  output({ ...cache, models }, [
+    `Krea models${category ? ` (${category})` : ""} — refreshed ${cache.refreshedAt}`,
+    ...models.map((item) => `${item.id}${item.category ? `  [${item.category}]` : ""}${item.price ? `  ~$${item.price.amount.toFixed(3)}` : "  cost unavailable"}${item.description ? `  ${item.description}` : ""}`),
+    ...(models.length ? [] : [`No models in "${category}".`]),
+    `\nCategories: ${categories}. Narrow with --category <name>.`,
   ].join("\n"));
 }
 
@@ -296,8 +301,8 @@ async function estimateCost(model: string, count: number): Promise<CostRecord | 
   }
   try {
     const cache = await new ModelCatalog().get();
-    const normalized = model.replace(/^image\//, "");
-    const match = cache.models.find((item) => item.id.replace(/^image\//, "") === normalized);
+    const normalized = bareModelId(model);
+    const match = cache.models.find((item) => bareModelId(item.id) === normalized);
     if (!match?.price) return undefined;
     return { ...match.price, amount: match.price.amount * count, refreshedAt: cache.refreshedAt };
   } catch {
@@ -428,5 +433,5 @@ function replaceUrlTemplate(value: unknown, url: string): unknown {
 }
 
 function help(): void {
-  process.stdout.write(`Figment creative lab\n\nCommands:\n  pnpm lab new --title <title> [--description ...] [--json]\n  pnpm lab projects [--json]\n  pnpm lab models [--refresh] [--json]\n  pnpm lab models --schema <model> [--json]\n  pnpm lab probe <project> --model <id> --prompt <text> [--category concepts] [--reference <path> | --reference-shot <number>] --reference-field <field>\n  pnpm lab generate <project> --model <id> --prompt <text> [--category concepts] [--reference-shot <number>] [--count 4] [--yes]\n  pnpm lab review --file <generation.json> [--favourite true] [--signal shortlist|reject|unreviewed]\n  pnpm lab reconcile <project>\n  pnpm lab touch <project>\n  pnpm studio\n`);
+  process.stdout.write(`Figment creative lab\n\nCommands:\n  pnpm lab new --title <title> [--description ...] [--json]\n  pnpm lab projects [--json]\n  pnpm lab models [--refresh] [--category <name>] [--json]\n  pnpm lab models --schema <model> [--json]\n  pnpm lab probe <project> --model <id> --prompt <text> [--category concepts] [--reference <path> | --reference-shot <number>] --reference-field <field>\n  pnpm lab generate <project> --model <id> --prompt <text> [--category concepts] [--reference-shot <number>] [--count 4] [--yes]\n  pnpm lab review --file <generation.json> [--favourite true] [--signal shortlist|reject|unreviewed]\n  pnpm lab reconcile <project>\n  pnpm lab touch <project>\n  pnpm studio\n`);
 }

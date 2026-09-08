@@ -6,7 +6,7 @@ import { KreaAdapter } from "./client.js";
 export class ModelCatalog {
   readonly cachePath: string;
 
-  constructor(cachePath = resolve(".cache/krea/image-models.json")) {
+  constructor(cachePath = resolve(".cache/krea/models.json")) {
     this.cachePath = cachePath;
   }
 
@@ -19,7 +19,9 @@ export class ModelCatalog {
       }
     }
     const client = new KreaAdapter();
-    const models = await client.listImageModels();
+    // The cache always holds every category. Filtering happens where the list is
+    // presented, so a narrowed view can never overwrite the full catalogue.
+    const models = await client.listModels();
     const refreshedAt = new Date().toISOString();
     for (const model of models) if (model.price) model.price.refreshedAt = refreshedAt;
     const cache: ModelCache = { schemaVersion: 1, refreshedAt, source: "krea-live-mcp", models };

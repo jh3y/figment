@@ -36,6 +36,10 @@ export interface StudioGeneration {
   imageUrl: string;
   thumbnailUrl?: string;
   mediaType: "image" | "video" | "model";
+  // A mesh borrows the rendered preview from its own job as a poster, so the grid can
+  // show a snapshot instead of spinning up WebGL for every card.
+  posterUrl?: string;
+  posterFile?: string;
   available: boolean;
 }
 
@@ -78,6 +82,11 @@ declare module "react" {
         "rotation-per-second"?: string;
         "interaction-prompt"?: string;
         "shadow-intensity"?: string;
+        "shadow-softness"?: string;
+        "environment-image"?: string;
+        "tone-mapping"?: string;
+        "min-field-of-view"?: string;
+        poster?: string;
         exposure?: string;
       };
     }

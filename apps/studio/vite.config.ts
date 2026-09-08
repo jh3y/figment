@@ -176,9 +176,17 @@ async function studioData() {
   const handles = await repository.generations();
   const numbers = await repository.shotNumbers();
   // Provenance may be committed without its generated assets, so the record can outlive the file it describes.
-  const generations = await Promise.all(handles.flatMap((handle) => handle.metadata.outputFiles.map(async (outputFile, outputIndex) => {
+  const generations = (await Promise.all(handles.flatMap((handle) => handle.metadata.outputFiles.map(async (outputFile, outputIndex) => {
     const outputPath = join(handle.batchPath, outputFile);
     const info = await fileInfo(outputPath);
+    // A mesh job answers with the model and a rendered preview. The preview is the
+    // mesh's poster rather than a shot of its own, so it is attached here and dropped
+    // from the gallery below instead of appearing as a second card for one generation.
+    const posterFile = isModelFile(outputFile)
+      ? handle.metadata.outputFiles.find((candidate) => !isModelFile(candidate) && !isVideoFile(candidate))
+      : undefined;
+    const posterPath = posterFile ? join(handle.batchPath, posterFile) : undefined;
+    const posterInfo = posterPath ? await fileInfo(posterPath) : undefined;
     return {
       projectId: handle.project.metadata.id,
       projectSlug: handle.project.metadata.slug,
@@ -193,11 +201,19 @@ async function studioData() {
       outputIndex,
       outputFile,
       imageUrl: fileUrl(outputPath),
-      thumbnailUrl: info && !isVideoFile(outputFile) && !isModelFile(outputFile) ? thumbnailUrl(outputPath, info.mtimeMs, info.size) : undefined,
+      thumbnailUrl: posterPath && posterInfo
+        ? thumbnailUrl(posterPath, posterInfo.mtimeMs, posterInfo.size)
+        : info && !isVideoFile(outputFile) && !isModelFile(outputFile) ? thumbnailUrl(outputPath, info.mtimeMs, info.size) : undefined,
+      posterUrl: posterPath && posterInfo ? fileUrl(posterPath) : undefined,
+      posterFile,
       mediaType: mediaTypeFor(outputFile),
       available: Boolean(info),
     };
-  })));
+  })))).filter((item, _index, all) => {
+    // Drop an image that is already serving as some mesh's poster in the same batch.
+    if (item.mediaType !== "image") return true;
+    return !all.some((other) => other.mediaType === "model" && other.metadataPath === item.metadataPath && other.posterFile === item.outputFile);
+  });
   return { scannedAt: new Date().toISOString(), projects: projectData, generations, activity: await activityFrom(handles) };
 }
 

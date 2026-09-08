@@ -294,7 +294,14 @@ function Media({ item, hoverPlay = false, autoPlay = false, thumbnail = false }:
   if (!item.available || failed) return <MissingMedia item={item} />;
   // A mesh is tens of megabytes and needs WebGL. Grid cells show a marker instead, so
   // scrolling a project full of meshes never downloads or renders any of them.
-  if (item.mediaType === "model") return thumbnail ? <ModelMarker /> : <ModelViewer item={item} onError={() => setFailed(true)} />;
+  // A mesh is tens of megabytes and needs WebGL, so the grid shows the job's own
+  // rendered preview when there is one and only the opened shot becomes interactive.
+  if (item.mediaType === "model") {
+    if (thumbnail) return item.thumbnailUrl
+      ? <img src={item.thumbnailUrl} alt={item.metadata.prompt} loading="lazy" decoding="async" onError={() => setFailed(true)} />
+      : <ModelMarker />;
+    return <ModelViewer item={item} onError={() => setFailed(true)} />;
+  }
   // A grid cell is ~225px wide; handing it the source art costs tens of megabytes of bitmap per card.
   if (item.mediaType !== "video") return <img src={(thumbnail && item.thumbnailUrl) || item.imageUrl} alt={item.metadata.prompt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
   const play = () => { if (hoverPlay) void video.current?.play(); };
@@ -325,17 +332,27 @@ function ModelViewer({ item, onError }: { item: StudioGeneration; onError: () =>
     return () => { live = false; };
   }, [item.imageUrl]);
 
-  if (!ready) return <span className="media-model-marker" role="status"><span className="media-model-mark" aria-hidden="true">◈</span><small>Loading 3D…</small></span>;
+  // The poster keeps the shot visible while tens of megabytes of mesh download, so the
+  // lightbox never sits blank; a neutral studio environment lights the matte toy
+  // surfaces evenly rather than with model-viewer's default warm cast.
+  if (!ready) return item.posterUrl
+    ? <img className="media-model-poster" src={item.posterUrl} alt={item.metadata.prompt} />
+    : <span className="media-model-marker" role="status"><span className="media-model-mark" aria-hidden="true">◈</span><small>Loading 3D…</small></span>;
   return <model-viewer
     className="media-model"
     src={item.imageUrl}
+    poster={item.posterUrl}
     alt={item.metadata.prompt}
     camera-controls
     auto-rotate
     rotation-per-second="18deg"
     interaction-prompt="none"
-    shadow-intensity="0.6"
-    exposure="1"
+    environment-image="neutral"
+    tone-mapping="neutral"
+    shadow-intensity="0.9"
+    shadow-softness="0.8"
+    exposure="1.15"
+    min-field-of-view="20deg"
   />;
 }
 

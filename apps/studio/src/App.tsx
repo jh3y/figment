@@ -440,7 +440,7 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
     art={<Media key={`${item.metadataPath}-${item.outputFile}`} item={item} autoPlay />}
     details={<>
       <p className="eyebrow">Shot #{item.shotNumber} · {friendlyCategory(item.category)} · {position + 1} / {total}</p>
-      <h2>{item.projectTitle}</h2>
+      <div className="lightbox-title"><h2>{item.projectTitle}</h2><button className="delete-action" type="button" aria-label="Delete output" title="Delete output" onClick={onDelete}><TrashIcon /></button></div>
       <div className="review-guide">
         <p>Choose one directional signal per image. Select it again to clear.</p>
         <p><strong>Favourite</strong> = strongest · <strong>Shortlist</strong> = develop · <strong>Reject</strong> = stop pursuing</p>
@@ -450,7 +450,6 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
         <button className={`review-shortlist ${item.metadata.review.signal === "shortlist" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "shortlist" ? clearDirection() : { favourite: false, signal: "shortlist" })}>Shortlist <kbd>2</kbd></button>
         <button className={`review-reject ${item.metadata.review.signal === "reject" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "reject" ? clearDirection() : { favourite: false, signal: "reject" })}>Reject <kbd>3</kbd></button>
       </div>
-      <button className="delete-action" type="button" aria-label="Delete output" title="Delete output" onClick={onDelete}><TrashIcon /></button>
       <p className={`review-save ${saveState}`} role="status" aria-live="polite">{saveState === "saving" ? "Saving…" : saveState === "saved" ? "✓ Saved to project files" : saveState === "error" ? "Couldn’t save — try again" : ""}</p>
       <Detail label="Prompt"><p className="prompt">{item.metadata.prompt}</p></Detail>
       <div className="facts"><Fact label="Model" value={item.metadata.model} /><Fact label="Cost" value={cost ? `${cost.kind === "estimate" ? "~" : ""}$${cost.amount.toFixed(3)}` : "Unknown"} /><Fact label="Created" value={new Date(item.metadata.createdAt).toLocaleString()} /><Fact label="Dimensions" value={dimensions(item.metadata)} /></div>

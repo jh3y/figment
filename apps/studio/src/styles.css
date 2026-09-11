@@ -145,6 +145,9 @@ button { color: inherit; }
 .details { width: 100%; height: 100%; min-height: 0; margin-left: 14px; overflow: auto; padding: 18px 20px; border-left: 1px solid #3a3a35; }
 .details .eyebrow { margin-left: 0; color: #85847c; }
 .details h2 { margin: 8px 0 18px; font: 400 29px Georgia, serif; }
+.lightbox-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.lightbox-title h2 { min-width: 0; }
+.lightbox-title .delete-action { flex: 0 0 auto; margin-top: 5px; }
 .review-guide { margin: -5px 0 13px; color: #8f8d84; font-size: 9px; line-height: 1.55; }
 .review-guide p { margin: 2px 0; }
 .review-guide strong { color: #c7c5bc; font-weight: 500; }

@@ -330,7 +330,12 @@ function Media({ item, hoverPlay = false, autoPlay = false, thumbnail = false }:
   if (item.mediaType !== "video") return <img src={(thumbnail && item.thumbnailUrl) || item.imageUrl} alt={item.metadata.prompt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
   const play = () => { if (hoverPlay) void video.current?.play(); };
   const pause = () => { if (hoverPlay && video.current) { video.current.pause(); video.current.currentTime = 0; } };
-  return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : "none"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} onError={() => setFailed(true)} />;
+  const showFirstFrame = () => {
+    if (!thumbnail || !video.current || !Number.isFinite(video.current.duration)) return;
+    video.current.currentTime = Math.min(0.1, Math.max(0, video.current.duration / 2));
+    video.current.pause();
+  };
+  return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : thumbnail ? "metadata" : "none"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onLoadedMetadata={showFirstFrame} onLoadedData={showFirstFrame} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} onError={() => setFailed(true)} />;
 }
 
 function ModelMarker() {

@@ -162,6 +162,30 @@ export default function App() {
     } catch { setProjectSave("error"); }
   }
 
+  async function deleteOutput(item: StudioGeneration) {
+    if (data?.readOnly || !window.confirm(`Delete ${item.outputFile} from shot #${item.shotNumber}? This removes the local file and its provenance record when it is the last output.`)) return;
+    try {
+      const response = await fetch("/api/delete-output", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ metadataPath: item.metadataPath, outputFile: item.outputFile }) });
+      if (!response.ok) throw new Error("Could not delete output.");
+      setSelected(undefined);
+      setLightboxItems([]);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
+  async function deletePrototype(project: StudioProject, prototype: StudioProject["prototypes"][number]) {
+    if (data?.readOnly || !window.confirm(`Delete the ${prototype.title} prototype and all of its local files?`)) return;
+    try {
+      const response = await fetch("/api/delete-prototype", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId: project.metadata.id, slug: prototype.slug }) });
+      if (!response.ok) throw new Error("Could not delete prototype.");
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
   function openGeneration(target: StudioGeneration) {
     const sequence = data?.generations.filter((candidate) => candidate.projectId === target.projectId) ?? [target];
     const index = sequence.findIndex((candidate) => candidate.metadataPath === target.metadataPath && candidate.outputFile === target.outputFile);
@@ -249,9 +273,9 @@ export default function App() {
 
       {activeProject && view === "brief" && <DocumentView project={activeProject} />}
       {activeProject && view === "references" && <References project={activeProject} />}
-      {activeProject && view === "prototypes" && <Prototypes project={activeProject} />}
+      {activeProject && view === "prototypes" && <Prototypes project={activeProject} onDelete={(prototype) => void deletePrototype(activeProject, prototype)} />}
     </main>
-    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} project={data.projects.find((project) => project.metadata.id === lightboxItems[selected]!.projectId)} generations={data.generations} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} onOpenGeneration={openGeneration} />}
+    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} project={data.projects.find((project) => project.metadata.id === lightboxItems[selected]!.projectId)} generations={data.generations} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} onDelete={() => void deleteOutput(lightboxItems[selected]!)} onOpenGeneration={openGeneration} />}
   </div>;
 }
 
@@ -389,7 +413,7 @@ function LightboxShell({ ariaLabel, onClose, onMove, canMove = true, art, detail
   </div>;
 }
 
-function Lightbox({ item, project, generations, position, total, saveState, onClose, onMove, onReview, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onOpenGeneration: (item: StudioGeneration) => void }) {
+function Lightbox({ item, project, generations, position, total, saveState, onClose, onMove, onReview, onDelete, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onDelete: () => void; onOpenGeneration: (item: StudioGeneration) => void }) {
   const [note, setNote] = useState(item.metadata.review.note ?? "");
   const [tags, setTags] = useState(item.metadata.review.tags.join(", "));
   useEffect(() => {
@@ -421,6 +445,7 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
         <button className={`review-shortlist ${item.metadata.review.signal === "shortlist" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "shortlist" ? clearDirection() : { favourite: false, signal: "shortlist" })}>Shortlist <kbd>2</kbd></button>
         <button className={`review-reject ${item.metadata.review.signal === "reject" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "reject" ? clearDirection() : { favourite: false, signal: "reject" })}>Reject <kbd>3</kbd></button>
       </div>
+      <button className="delete-action" type="button" onClick={onDelete}>Delete output…</button>
       <p className={`review-save ${saveState}`} role="status" aria-live="polite">{saveState === "saving" ? "Saving…" : saveState === "saved" ? "✓ Saved to project files" : saveState === "error" ? "Couldn’t save — try again" : ""}</p>
       <Detail label="Prompt"><p className="prompt">{item.metadata.prompt}</p></Detail>
       <div className="facts"><Fact label="Model" value={item.metadata.model} /><Fact label="Cost" value={cost ? `${cost.kind === "estimate" ? "~" : ""}$${cost.amount.toFixed(3)}` : "Unknown"} /><Fact label="Created" value={new Date(item.metadata.createdAt).toLocaleString()} /><Fact label="Dimensions" value={dimensions(item.metadata)} /></div>
@@ -490,7 +515,7 @@ function ReferenceLightbox({ references, position, onClose, onMove }: { referenc
   />;
 }
 
-function Prototypes({ project }: { project: StudioProject }) {
+function Prototypes({ project, onDelete }: { project: StudioProject; onDelete: (prototype: StudioProject["prototypes"][number]) => void }) {
   const [selectedSlug, setSelectedSlug] = useState(project.prototypes.find((prototype) => prototype.launchUrl)?.slug ?? project.prototypes[0]?.slug);
   useEffect(() => { setSelectedSlug(project.prototypes.find((prototype) => prototype.launchUrl)?.slug ?? project.prototypes[0]?.slug); }, [project.metadata.id, project.prototypes]);
   const selected = project.prototypes.find((prototype) => prototype.slug === selectedSlug);
@@ -503,7 +528,7 @@ function Prototypes({ project }: { project: StudioProject }) {
       </button>)}
     </aside>
     {selected && <section className="prototype-stage">
-      <header><div><p className="eyebrow">{selected.kind} prototype</p><h2>{selected.title}</h2>{selected.description && <p>{selected.description}</p>}</div>{selected.launchUrl && <a href={selected.launchUrl} target="_blank" rel="noreferrer">Open in new tab ↗</a>}</header>
+      <header><div><p className="eyebrow">{selected.kind} prototype</p><h2>{selected.title}</h2>{selected.description && <p>{selected.description}</p>}</div><div className="prototype-actions">{selected.launchUrl && <a href={selected.launchUrl} target="_blank" rel="noreferrer">Open in new tab ↗</a>}<button type="button" className="delete-action" onClick={() => onDelete(selected)}>Delete prototype…</button></div></header>
       {selected.launchUrl && selected.embeddable
         ? <iframe src={selected.launchUrl} title={`${selected.title} prototype`} sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin allow-downloads" />
         : <div className="prototype-empty"><p>{selected.launchUrl ? "This prototype is configured to open separately." : "There isn’t a runnable preview yet."}</p><code>{selected.path}</code>{!selected.launchUrl && <small>Add an <strong>index.html</strong>, or a <strong>prototype.json</strong> pointing to its local development URL.</small>}</div>}

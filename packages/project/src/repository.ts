@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, readdir } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import {
   atomicWrite,
@@ -196,6 +196,31 @@ export class ProjectRepository {
     return record;
   }
 
+  async deleteOutput(metadataPath: string, outputFile: string): Promise<void> {
+    const resolved = resolve(metadataPath);
+    this.assertInsideProjects(resolved);
+    const record = JSON.parse(await readFile(resolved, "utf8")) as GenerationRecord;
+    if (!record.outputFiles.includes(outputFile)) throw new Error("Output is not part of this generation.");
+    const outputPath = resolve(dirname(resolved), outputFile);
+    this.assertInsideProjects(outputPath);
+    await rm(outputPath, { force: true });
+    const remaining = record.outputFiles.filter((candidate) => candidate !== outputFile);
+    if (remaining.length) {
+      record.outputFiles = remaining;
+      await writeJson(resolved, record);
+    } else {
+      await rm(resolved, { force: true });
+    }
+  }
+
+  async deletePrototype(projectId: string, slug: string): Promise<void> {
+    const project = await this.find(projectId);
+    const prototypePath = resolve(project.path, "prototypes", slug);
+    const prototypesRoot = resolve(project.path, "prototypes");
+    if (!inside(prototypesRoot, prototypePath) || basename(prototypePath) !== slug) throw new Error("Invalid prototype path.");
+    await rm(prototypePath, { recursive: true, force: true });
+  }
+
   async updateStatus(identifier: string, status: ProjectStatus): Promise<ProjectMetadata> {
     if (!["active", "paused", "complete", "archived"].includes(status)) throw new Error(`Invalid project status: ${status}`);
     const project = await this.find(identifier);
@@ -215,6 +240,11 @@ export class ProjectRepository {
     if (!project) return;
     await this.touch(project);
   }
+
+  private assertInsideProjects(path: string): void {
+    const root = `${resolve(this.root)}${sep}`;
+    if (!path.startsWith(root)) throw new Error("Path is outside the projects directory.");
+  }
 }
 
 async function walk(root: string, include: (path: string) => boolean): Promise<string[]> {
@@ -229,6 +259,10 @@ async function walk(root: string, include: (path: string) => boolean): Promise<s
   } catch {
     return [];
   }
+}
+
+function inside(root: string, path: string): boolean {
+  return path === root || path.startsWith(`${root}${sep}`);
 }
 
 function initialBrief(title: string): string {

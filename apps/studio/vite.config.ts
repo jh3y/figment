@@ -108,6 +108,20 @@ function filesystemApi(): Plugin {
             suppressWatchUntil = Date.now() + 1_000;
             return json(response, await repository.updateStatus(body.projectId, body.status));
           }
+          if (request.method === "POST" && url.pathname === "/api/delete-output") {
+            const body = await readBody(request) as { metadataPath?: string; outputFile?: string };
+            if (!body.metadataPath || !body.outputFile) return json(response, { error: "Invalid output deletion payload" }, 400);
+            suppressWatchUntil = Date.now() + 1_000;
+            await repository.deleteOutput(resolve(repositoryRoot, body.metadataPath), body.outputFile);
+            return json(response, { ok: true });
+          }
+          if (request.method === "POST" && url.pathname === "/api/delete-prototype") {
+            const body = await readBody(request) as { projectId?: string; slug?: string };
+            if (!body.projectId || !body.slug) return json(response, { error: "Invalid prototype deletion payload" }, 400);
+            suppressWatchUntil = Date.now() + 1_000;
+            await repository.deletePrototype(body.projectId, body.slug);
+            return json(response, { ok: true });
+          }
           if (request.method === "GET" && url.pathname === "/project-file") {
             const relativePath = url.searchParams.get("path") ?? "";
             const path = resolve(repositoryRoot, relativePath);

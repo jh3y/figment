@@ -304,7 +304,7 @@ function ActivityLight({ readOnly, activity, scannedAt, pending, stale, refreshi
 
 function GalleryCard({ item, onOpen, onReview }: { item: StudioGeneration; onOpen: () => void; onReview: (patch: ReviewPatch) => void }) {
   return <article className={`card ${item.metadata.review.signal === "reject" ? "rejected" : ""}`}>
-    <button className="artwork" onClick={onOpen}><Media item={item} hoverPlay thumbnail /><span className="kind">{friendlyCategory(item.category)}</span><span className="shot-number">#{item.shotNumber}</span></button>
+    <button className="artwork" onClick={onOpen}><Media item={item} hoverPlay thumbnail />{item.mediaType === "video" && <span className="video-badge" aria-label="Video output" title="Video output"><VideoIcon /></span>}<span className="kind">{friendlyCategory(item.category)}</span><span className="shot-number">#{item.shotNumber}</span></button>
     <button className={`heart card-heart ${item.metadata.review.favourite ? "active" : ""}`} aria-label={`Favourite shot ${item.shotNumber}`} onClick={() => onReview(item.metadata.review.favourite ? clearDirection() : { favourite: true, signal: "unreviewed" })}>♥</button>
   </article>;
 }
@@ -450,7 +450,7 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
         <button className={`review-shortlist ${item.metadata.review.signal === "shortlist" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "shortlist" ? clearDirection() : { favourite: false, signal: "shortlist" })}>Shortlist <kbd>2</kbd></button>
         <button className={`review-reject ${item.metadata.review.signal === "reject" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "reject" ? clearDirection() : { favourite: false, signal: "reject" })}>Reject <kbd>3</kbd></button>
       </div>
-      <button className="delete-action" type="button" onClick={onDelete}>Delete output…</button>
+      <button className="delete-action" type="button" aria-label="Delete output" title="Delete output" onClick={onDelete}><TrashIcon /></button>
       <p className={`review-save ${saveState}`} role="status" aria-live="polite">{saveState === "saving" ? "Saving…" : saveState === "saved" ? "✓ Saved to project files" : saveState === "error" ? "Couldn’t save — try again" : ""}</p>
       <Detail label="Prompt"><p className="prompt">{item.metadata.prompt}</p></Detail>
       <div className="facts"><Fact label="Model" value={item.metadata.model} /><Fact label="Cost" value={cost ? `${cost.kind === "estimate" ? "~" : ""}$${cost.amount.toFixed(3)}` : "Unknown"} /><Fact label="Created" value={new Date(item.metadata.createdAt).toLocaleString()} /><Fact label="Dimensions" value={dimensions(item.metadata)} /></div>
@@ -533,7 +533,7 @@ function Prototypes({ project, onDelete }: { project: StudioProject; onDelete: (
       </button>)}
     </aside>
     {selected && <section className="prototype-stage">
-      <header><div><p className="eyebrow">{selected.kind} prototype</p><h2>{selected.title}</h2>{selected.description && <p>{selected.description}</p>}</div><div className="prototype-actions">{selected.launchUrl && <a href={selected.launchUrl} target="_blank" rel="noreferrer">Open in new tab ↗</a>}<button type="button" className="delete-action" onClick={() => onDelete(selected)}>Delete prototype…</button></div></header>
+      <header><div><p className="eyebrow">{selected.kind} prototype</p><h2>{selected.title}</h2>{selected.description && <p>{selected.description}</p>}</div><div className="prototype-actions">{selected.launchUrl && <a href={selected.launchUrl} target="_blank" rel="noreferrer">Open in new tab ↗</a>}<button type="button" className="delete-action" aria-label="Delete prototype" title="Delete prototype" onClick={() => onDelete(selected)}><TrashIcon /></button></div></header>
       {selected.launchUrl && selected.embeddable
         ? <iframe src={selected.launchUrl} title={`${selected.title} prototype`} sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin allow-downloads" />
         : <div className="prototype-empty"><p>{selected.launchUrl ? "This prototype is configured to open separately." : "There isn’t a runnable preview yet."}</p><code>{selected.path}</code>{!selected.launchUrl && <small>Add an <strong>index.html</strong>, or a <strong>prototype.json</strong> pointing to its local development URL.</small>}</div>}
@@ -551,6 +551,8 @@ function ThemeControl({ value, onChange }: { value: ThemePreference; onChange: (
 }
 
 function Empty({ hasProjects }: { hasProjects: boolean }) { return <div className="empty"><p className="eyebrow">A quiet canvas</p><h2>{hasProjects ? "No outputs match this view." : "No projects yet."}</h2><p>{hasProjects ? "Adjust the filters or run a small probe." : "Projects will appear here as they are added to the filesystem."}</p>{hasProjects && <code>pnpm lab probe &lt;project&gt; …</code>}</div>; }
+function VideoIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h6.2A1.3 1.3 0 0 1 10.5 4.8v1.1l2.2-1.5a.8.8 0 0 1 1.3.65v5.9a.8.8 0 0 1-1.3.65l-2.2-1.5v1.1a1.3 1.3 0 0 1-1.3 1.3H3a1.3 1.3 0 0 1-1.3-1.3V4.8A1.3 1.3 0 0 1 3 3.5Z" /></svg>; }
+function TrashIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.1 2.5h5.8l.5 1.5h2.1v1H2.5V4h2.1l.5-1.5ZM4 6h8l-.5 7.5h-7L4 6Zm2 1.2v5h1v-5H6Zm3 0v5h1v-5H9ZM6.3 1h3.4l.4 1.5H5.9L6.3 1Z" /></svg>; }
 function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) { return <label><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="all">All</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>; }
 function Detail({ label, children }: { label: string; children: React.ReactNode }) { return <section className="detail-section"><h3>{label}</h3>{children}</section>; }
 function Fact({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div>; }

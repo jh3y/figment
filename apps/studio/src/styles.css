@@ -123,6 +123,8 @@ button { color: inherit; }
 .card.rejected .artwork:hover img { opacity: .46; }
 .kind { position: absolute; left: 8px; bottom: 8px; padding: 4px 6px; background: rgba(20,20,17,.78); color: white; font-family: ui-monospace, monospace; font-size: 8px; text-transform: uppercase; letter-spacing: .09em; }
 .shot-number { position: absolute; top: 8px; right: 8px; min-width: 27px; padding: 5px 6px; border-radius: 3px; background: rgba(20,20,17,.82); color: white; font: 9px ui-monospace, monospace; text-align: center; }
+.video-badge { position: absolute; left: 8px; top: 8px; display: grid; width: 25px; height: 25px; place-items: center; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; background: rgba(20,20,17,.78); color: white; }
+.video-badge svg { width: 14px; height: 14px; fill: currentColor; }
 .heart { border: 0; background: transparent; color: #aaa79d; cursor: pointer; padding: 0 2px; font-size: 15px; }
 .heart.active { color: #63a66f; }
 .card-heart { position: absolute; right: 8px; bottom: 8px; width: 27px; height: 27px; padding: 0; border-radius: 50%; background: rgba(20,20,17,.78); color: rgba(255,255,255,.7); }
@@ -153,7 +155,8 @@ button { color: inherit; }
 .review-actions .review-reject { --review-color: #e87972; --review-fill: #4b2624; }
 .review-actions button:hover { border-color: var(--review-color); color: var(--review-color); }
 .review-actions button.active { border-color: var(--review-color); background: var(--review-fill); color: var(--review-color); }
-.delete-action { border: 1px solid #70413e; border-radius: 4px; background: transparent; color: #d88982; padding: 7px 9px; cursor: pointer; font-size: 9px; }
+.delete-action { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid #70413e; border-radius: 4px; background: transparent; color: #d88982; padding: 0; cursor: pointer; }
+.delete-action svg { width: 15px; height: 15px; fill: currentColor; }
 .delete-action:hover { border-color: #e87972; color: #f09a92; background: #3b2322; }
 .review-save { min-height: 14px; margin: 7px 0 -7px; color: #85847c; font: 8px ui-monospace, monospace; text-align: right; }
 .review-save.saved { color: #79c487; }

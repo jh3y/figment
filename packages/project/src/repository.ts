@@ -1,4 +1,5 @@
-import { access, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import {
   atomicWrite,
@@ -28,6 +29,15 @@ export interface GenerationHandle {
   manifest: BatchManifest;
   metadataPath: string;
   metadata: GenerationRecord;
+}
+
+export interface CuratedAsset {
+  schemaVersion: 1;
+  assetId: string;
+  file: string;
+  source: { metadataPath: string; outputFile: string };
+  mediaType: "image" | "video" | "model";
+  createdAt: string;
 }
 
 interface ShotIndex {
@@ -211,6 +221,33 @@ export class ProjectRepository {
     } else {
       await rm(resolved, { force: true });
     }
+  }
+
+  async promoteOutput(metadataPath: string, outputFile: string, bytes?: Uint8Array, extension?: string): Promise<CuratedAsset> {
+    const resolved = resolve(metadataPath);
+    this.assertInsideProjects(resolved);
+    const record = JSON.parse(await readFile(resolved, "utf8")) as GenerationRecord;
+    if (!record.outputFiles.includes(outputFile)) throw new Error("Output is not part of this generation.");
+    const sourcePath = resolve(dirname(resolved), outputFile);
+    this.assertInsideProjects(sourcePath);
+    const sourceBytes = bytes ?? await readFile(sourcePath);
+    const assetId = createHash("sha256").update(sourceBytes).digest("hex");
+    const outputExtension = extension ?? extname(outputFile).toLowerCase();
+    const projectPath = dirname(dirname(dirname(resolved)));
+    const libraryPath = join(projectPath, "assets", "library");
+    const file = `${assetId}${outputExtension}`;
+    await mkdir(libraryPath, { recursive: true });
+    const destination = join(libraryPath, file);
+    try { await access(destination); } catch { await writeFile(destination, sourceBytes); }
+    const manifestPath = join(libraryPath, "manifest.json");
+    let assets: CuratedAsset[] = [];
+    try { assets = JSON.parse(await readFile(manifestPath, "utf8")) as CuratedAsset[]; } catch { /* First promoted asset. */ }
+    const existing = assets.find((asset) => asset.assetId === assetId && asset.source.metadataPath === relative(this.root, resolved) && asset.source.outputFile === outputFile);
+    if (existing) return existing;
+    const mediaType = [".mp4", ".webm", ".mov", ".ogv"].includes(outputExtension) ? "video" : [".glb", ".gltf"].includes(outputExtension) ? "model" : "image";
+    const asset: CuratedAsset = { schemaVersion: 1, assetId, file, source: { metadataPath: relative(this.root, resolved), outputFile }, mediaType, createdAt: new Date().toISOString() };
+    await writeJson(manifestPath, [...assets, asset]);
+    return asset;
   }
 
   async deletePrototype(projectId: string, slug: string): Promise<void> {

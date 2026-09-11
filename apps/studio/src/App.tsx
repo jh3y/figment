@@ -25,6 +25,7 @@ export default function App() {
   const [tag, setTag] = useState(preferences.tag ?? "all");
   const [showRejected, setShowRejected] = useState(preferences.showRejected ?? localStorage.getItem("figment-show-rejected") === "true");
   const [reviewSaves, setReviewSaves] = useState<Record<string, ReviewSaveState>>({});
+  const [curatedSaves, setCuratedSaves] = useState<Record<string, ReviewSaveState>>({});
   const [projectSave, setProjectSave] = useState<ReviewSaveState>("idle");
   const [liveActivity, setLiveActivity] = useState<StudioActivity>();
   const [refreshing, setRefreshing] = useState(false);
@@ -175,6 +176,19 @@ export default function App() {
     }
   }
 
+  async function promoteOutput(item: StudioGeneration) {
+    if (data?.readOnly) return;
+    const key = `${item.metadataPath}:${item.outputFile}`;
+    setCuratedSaves((current) => ({ ...current, [key]: "saving" }));
+    try {
+      const response = await fetch("/api/promote-output", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ metadataPath: item.metadataPath, outputFile: item.outputFile }) });
+      if (!response.ok) throw new Error("Could not promote output.");
+      setCuratedSaves((current) => ({ ...current, [key]: "saved" }));
+    } catch {
+      setCuratedSaves((current) => ({ ...current, [key]: "error" }));
+    }
+  }
+
   async function deletePrototype(project: StudioProject, prototype: StudioProject["prototypes"][number]) {
     if (data?.readOnly || !window.confirm(`Delete the ${prototype.title} prototype and all of its local files?`)) return;
     try {
@@ -275,7 +289,7 @@ export default function App() {
       {activeProject && view === "references" && <References project={activeProject} />}
       {activeProject && view === "prototypes" && <Prototypes project={activeProject} onDelete={(prototype) => void deletePrototype(activeProject, prototype)} />}
     </main>
-    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} project={data.projects.find((project) => project.metadata.id === lightboxItems[selected]!.projectId)} generations={data.generations} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} onDelete={() => void deleteOutput(lightboxItems[selected]!)} onOpenGeneration={openGeneration} />}
+    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} project={data.projects.find((project) => project.metadata.id === lightboxItems[selected]!.projectId)} generations={data.generations} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} curatedState={curatedSaves[`${lightboxItems[selected]!.metadataPath}:${lightboxItems[selected]!.outputFile}`] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} onDelete={() => void deleteOutput(lightboxItems[selected]!)} onPromote={() => void promoteOutput(lightboxItems[selected]!)} onOpenGeneration={openGeneration} />}
   </div>;
 }
 
@@ -418,7 +432,7 @@ function LightboxShell({ ariaLabel, onClose, onMove, canMove = true, art, detail
   </div>;
 }
 
-function Lightbox({ item, project, generations, position, total, saveState, onClose, onMove, onReview, onDelete, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onDelete: () => void; onOpenGeneration: (item: StudioGeneration) => void }) {
+function Lightbox({ item, project, generations, position, total, saveState, curatedState, onClose, onMove, onReview, onDelete, onPromote, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; curatedState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onDelete: () => void; onPromote: () => void; onOpenGeneration: (item: StudioGeneration) => void }) {
   const [note, setNote] = useState(item.metadata.review.note ?? "");
   const [tags, setTags] = useState(item.metadata.review.tags.join(", "));
   useEffect(() => {
@@ -450,6 +464,7 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
         <button className={`review-shortlist ${item.metadata.review.signal === "shortlist" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "shortlist" ? clearDirection() : { favourite: false, signal: "shortlist" })}>Shortlist <kbd>2</kbd></button>
         <button className={`review-reject ${item.metadata.review.signal === "reject" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "reject" ? clearDirection() : { favourite: false, signal: "reject" })}>Reject <kbd>3</kbd></button>
       </div>
+      <button className="curated-action" type="button" disabled={curatedState === "saving" || curatedState === "saved"} onClick={onPromote}>{curatedState === "saved" ? "✓ In curated library" : curatedState === "saving" ? "Promoting…" : "Promote to library"}</button>
       <p className={`review-save ${saveState}`} role="status" aria-live="polite">{saveState === "saving" ? "Saving…" : saveState === "saved" ? "✓ Saved to project files" : saveState === "error" ? "Couldn’t save — try again" : ""}</p>
       <Detail label="Prompt"><p className="prompt">{item.metadata.prompt}</p></Detail>
       <div className="facts"><Fact label="Model" value={item.metadata.model} /><Fact label="Cost" value={cost ? `${cost.kind === "estimate" ? "~" : ""}$${cost.amount.toFixed(3)}` : "Unknown"} /><Fact label="Created" value={new Date(item.metadata.createdAt).toLocaleString()} /><Fact label="Dimensions" value={dimensions(item.metadata)} /></div>

@@ -39,9 +39,34 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; color: var(--ink); background: var(--bg); }
 button, input, textarea, select { font: inherit; }
 button { color: inherit; }
-.shell { display: grid; grid-template-columns: 228px 1fr; min-height: 100vh; }
-.sidebar { position: sticky; top: 0; height: 100vh; overflow: hidden; padding: 27px 15px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; background: var(--sidebar); }
-.brand { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 0 10px 30px; font-size: 14px; font-weight: 600; letter-spacing: -.02em; }
+.shell { display: grid; grid-template-columns: 228px 1fr; grid-template-rows: auto minmax(0, 1fr); min-height: 100vh; }
+
+/* Brand and toggle live in a bar spanning both columns, so collapsing the
+   sidebar cannot move, hide or resize them. */
+.app-bar { grid-column: 1 / -1; position: sticky; top: 0; z-index: 6; display: flex; align-items: center; gap: 10px; height: 54px; padding: 0 15px; border-bottom: 1px solid var(--line); background: var(--sidebar); font-size: 14px; font-weight: 600; letter-spacing: -.02em; }
+.app-bar .brand-mark { flex: 0 0 28px; width: 28px; height: 28px; }
+.app-bar .sidebar-toggle { margin-left: 4px; }
+
+/* Collapsing gives the gallery the width back, so the column closes rather than
+   the sidebar sliding over the top — that is the narrow-screen behaviour, where
+   there is no width to reclaim. The panel clips as the column narrows; moving
+   its contents separately just exposes the panel background as it goes. */
+@media (min-width: 901px) {
+  .shell { transition: grid-template-columns .3s ease; }
+  .sidebar, .workspace { grid-row: 2; }
+  .shell:not(.sidebar-open) { grid-template-columns: 0 1fr; }
+  .sidebar { overflow: hidden; }
+  /* The panel drifts out as the column closes, rather than being revealed
+     leaving. Background included, so nothing is left standing behind it. */
+  .sidebar-inner { transition: opacity .2s ease, translate .3s ease; }
+  .shell:not(.sidebar-open) .sidebar-inner { opacity: 0; translate: -12px 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell, .sidebar, .sidebar-inner { transition: none; }
+}
+.sidebar { position: sticky; top: 54px; height: calc(100vh - 54px); overflow: hidden; }
+.sidebar-inner { width: 228px; height: 100%; display: flex; flex-direction: column; padding: 20px 15px 18px; border-right: 1px solid var(--line); background: var(--sidebar); }
 .brand-mark { position: relative; flex: 0 0 32px; width: 32px; height: 32px; overflow: hidden; border: 1px solid var(--line); border-radius: 50%; background: var(--accent); cursor: default; }
 .brand-avatar { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; }
 .brand-avatar-hover { visibility: hidden; }
@@ -78,12 +103,13 @@ button { color: inherit; }
 .sidebar-refresh:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
 @keyframes activity-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
 @media (prefers-reduced-motion: reduce) { .sidebar-note.generating span::before { animation: none; } }
-.workspace { min-width: 0; padding: 0 28px 60px; }
+.workspace { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 0 28px 60px; }
 /* The header stays put while the gallery scrolls, so filters and project identity are always reachable. */
-.workspace-header { position: sticky; top: 0; z-index: 4; margin: 0 -28px; padding: 0 28px; background: var(--bg); }
+.workspace-header { position: sticky; top: 54px; z-index: 4; margin: 0 -28px; padding: 0 28px; background: var(--bg); }
 .topbar { min-height: 102px; display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 24px 3px 18px; border-bottom: 1px solid var(--line); }
-.sidebar-toggle { display: none; align-items: center; gap: 7px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 4px; background: transparent; padding: 6px 9px; color: var(--ink); cursor: pointer; font: 9px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; }
-.sidebar-toggle:hover { background: var(--hover); }
+.sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 1px solid transparent; border-radius: 5px; background: transparent; padding: 0; color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1; transition: color .15s ease, background .15s ease, border-color .15s ease; }
+.sidebar-toggle:hover { color: var(--ink); background: var(--hover); border-color: var(--line); }
+.sidebar-toggle:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
 .sidebar-scrim { display: none; }
 .topbar .eyebrow { margin: 0; }
 .topbar h1 { margin: 0; font: 500 34px/1 Georgia, serif; letter-spacing: -.035em; }
@@ -205,7 +231,7 @@ details pre { overflow: auto; color: #aaa89f; font: 9px/1.6 ui-monospace, monosp
 .reference-open:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .reference-grid figcaption { padding: 8px 1px; color: var(--muted); font-family: ui-monospace, monospace; font-size: 9px; }
 .lightbox .previous[disabled], .lightbox .next[disabled] { opacity: .25; cursor: default; }
-.prototype-browser { height: calc(100vh - 103px); margin: 0 -28px -60px; display: grid; grid-template-columns: 245px minmax(0, 1fr); }
+.prototype-browser { flex: 1 1 auto; min-height: 0; margin: 0 -28px -60px; display: grid; grid-template-columns: 245px minmax(0, 1fr); }
 .prototype-list { min-height: 0; overflow: auto; padding: 20px 12px; border-right: 1px solid var(--line); }
 .prototype-intro { padding: 3px 8px 18px; }
 .prototype-intro .eyebrow { margin-left: 0; }
@@ -237,9 +263,10 @@ details pre { overflow: auto; color: #aaa89f; font: 9px/1.6 ui-monospace, monosp
 /* Below this the sidebar costs more than it gives, so it becomes a drawer over the workspace. */
 @media (max-width: 900px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { position: fixed; z-index: 20; top: 0; left: 0; width: 258px; max-width: 84vw; border-right: 1px solid var(--line); transform: translateX(-100%); transition: transform .22s ease; }
+  .sidebar-inner { width: 100%; }
+  .sidebar { position: fixed; z-index: 20; top: 54px; left: 0; width: 258px; max-width: 84vw; height: calc(100dvh - 54px); transform: translateX(-100%); transition: transform .22s ease; }
   .shell.sidebar-open .sidebar { transform: translateX(0); }
-  .sidebar-scrim { display: block; position: fixed; z-index: 19; inset: 0; border: 0; padding: 0; background: rgba(20,20,17,.42); opacity: 0; pointer-events: none; transition: opacity .22s ease; }
+  .sidebar-scrim { display: block; position: fixed; z-index: 19; inset: 54px 0 0; border: 0; padding: 0; background: rgba(20,20,17,.42); opacity: 0; pointer-events: none; transition: opacity .22s ease; }
   .shell.sidebar-open .sidebar-scrim { opacity: 1; pointer-events: auto; }
   .sidebar-toggle { display: inline-flex; }
   .workspace { padding: 0 18px 60px; }

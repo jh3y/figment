@@ -10,6 +10,8 @@ type ReviewSaveState = "idle" | "saving" | "saved" | "error";
 interface StudioPreferences { projectId: string; view: View; model: string; category: string; batch: string; review: string; tag: string; showRejected: boolean }
 const STUDIO_PREFERENCES_KEY = "figment-studio-preferences-v1";
 
+const shortcutLabel = typeof navigator !== "undefined" && /mac/i.test(navigator.platform) ? "⌘B" : "Ctrl+B";
+
 export default function App() {
   const preferences = useMemo(readStudioPreferences, []);
   const [data, setData] = useState<StudioData>();
@@ -29,7 +31,12 @@ export default function App() {
   const [projectSave, setProjectSave] = useState<ReviewSaveState>("idle");
   const [liveActivity, setLiveActivity] = useState<StudioActivity>();
   const [refreshing, setRefreshing] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    const stored = localStorage.getItem("studio:sidebar");
+    if (stored !== null) return stored === "open";
+    return matchMedia("(min-width: 901px)").matches;
+  });
+  useEffect(() => { localStorage.setItem("studio:sidebar", sidebarOpen ? "open" : "closed"); }, [sidebarOpen]);
   const refreshingRef = useRef(false);
   const [theme, setTheme] = useState<ThemePreference>(() => {
     const saved = localStorage.getItem("figment-theme");
@@ -66,10 +73,26 @@ export default function App() {
     if (!data.projects.some((project) => project.metadata.id === projectId)) { setProjectId("all"); setView("gallery"); }
   }, [data, projectId, view]);
   useEffect(() => { setProjectSave("idle"); }, [projectId]);
-  useEffect(() => { setSidebarOpen(false); }, [projectId, view]);
+  // Only the narrow-screen drawer should close itself on navigation or Escape.
+  // Wide screens show a real column: collapsing it every time you picked a
+  // project would be a tic, not a feature.
+  useEffect(() => { if (matchMedia("(max-width: 900px)").matches) setSidebarOpen(false); }, [projectId, view]);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "b" || !(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const el = event.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(input|textarea|select)$/i.test(el.tagName))) return;
+      event.preventDefault();
+      setSidebarOpen((current) => !current);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
   useEffect(() => {
     if (!sidebarOpen) return;
-    const handler = (event: KeyboardEvent) => { if (event.key === "Escape") setSidebarOpen(false); };
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && matchMedia("(max-width: 900px)").matches) setSidebarOpen(false);
+    };
     window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler);
   }, [sidebarOpen]);
   async function fetchStudioData(): Promise<StudioData> {
@@ -211,15 +234,23 @@ export default function App() {
   if (!data) return <main className="state"><p className="eyebrow">Figment Studio</p><h1>Opening the lab…</h1></main>;
 
   return <div className={`shell ${data.readOnly ? "read-only" : ""} ${sidebarOpen ? "sidebar-open" : ""}`}>
+    <header className="app-bar">
+      <span className="brand-mark" tabIndex={0} aria-label="Fig, the Figment mascot">
+        <img className="brand-avatar brand-avatar-default" src="./fig-avatar.png" alt="" />
+        <img className="brand-avatar brand-avatar-hover" src="./fig-avatar-hover.png" alt="" />
+      </span>
+      <b>Figment</b>
+      <button type="button" className="sidebar-toggle" aria-expanded={sidebarOpen} aria-controls="studio-sidebar"
+        title={`${sidebarOpen ? "Hide" : "Show"} projects (${shortcutLabel})`}
+        aria-label={`${sidebarOpen ? "Hide" : "Show"} projects`}
+        onClick={() => setSidebarOpen((current) => !current)}>
+        <span aria-hidden="true">☰</span>
+      </button>
+    </header>
     <button type="button" className="sidebar-scrim" tabIndex={-1} aria-hidden="true" onClick={() => setSidebarOpen(false)} />
     <aside className="sidebar" id="studio-sidebar">
-      <div className="brand">
-        <span className="brand-mark" tabIndex={0} aria-label="Fig, the Figment mascot">
-          <img className="brand-avatar brand-avatar-default" src="./fig-avatar.png" alt="" />
-          <img className="brand-avatar brand-avatar-hover" src="./fig-avatar-hover.png" alt="" />
-        </span>
-        <span>Figment</span>
-      </div>
+      <div className="sidebar-inner">
+
       <nav className="project-list" aria-label="Projects">
         <button className={`project-row ${projectId === "all" ? "active" : ""}`} onClick={() => { setProjectId("all"); setView("gallery"); }}>
           <span>All work</span><small>{data.generations.length}</small>
@@ -233,15 +264,13 @@ export default function App() {
       </nav>
       <ThemeControl value={theme} onChange={setTheme} />
       <ActivityLight readOnly={Boolean(data.readOnly)} activity={activity} scannedAt={data.scannedAt} pending={pendingOutputs} stale={staleSnapshot} refreshing={refreshing} onRefresh={() => void refresh()} />
+      </div>
     </aside>
 
     <main className="workspace">
       <div className="workspace-header">
         <header className="topbar">
           <div>
-            <button type="button" className="sidebar-toggle" aria-expanded={sidebarOpen} aria-controls="studio-sidebar" onClick={() => setSidebarOpen((current) => !current)}>
-              <span aria-hidden="true">☰</span> Projects
-            </button>
             <div className="project-context">
               <p className="eyebrow">{activeProject ? activeProject.year : "Creative archive"}</p>
               {activeProject && <>

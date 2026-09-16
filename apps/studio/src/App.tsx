@@ -25,6 +25,7 @@ export default function App() {
   const [tag, setTag] = useState(preferences.tag ?? "all");
   const [showRejected, setShowRejected] = useState(preferences.showRejected ?? localStorage.getItem("figment-show-rejected") === "true");
   const [reviewSaves, setReviewSaves] = useState<Record<string, ReviewSaveState>>({});
+  const [curatedSaves, setCuratedSaves] = useState<Record<string, ReviewSaveState>>({});
   const [projectSave, setProjectSave] = useState<ReviewSaveState>("idle");
   const [liveActivity, setLiveActivity] = useState<StudioActivity>();
   const [refreshing, setRefreshing] = useState(false);
@@ -162,6 +163,43 @@ export default function App() {
     } catch { setProjectSave("error"); }
   }
 
+  async function deleteOutput(item: StudioGeneration) {
+    if (data?.readOnly || !window.confirm(`Delete ${item.outputFile} from shot #${item.shotNumber}? This removes the local file and its provenance record when it is the last output.`)) return;
+    try {
+      const response = await fetch("/api/delete-output", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ metadataPath: item.metadataPath, outputFile: item.outputFile }) });
+      if (!response.ok) throw new Error("Could not delete output.");
+      setSelected(undefined);
+      setLightboxItems([]);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
+  async function promoteOutput(item: StudioGeneration) {
+    if (data?.readOnly) return;
+    const key = `${item.metadataPath}:${item.outputFile}`;
+    setCuratedSaves((current) => ({ ...current, [key]: "saving" }));
+    try {
+      const response = await fetch("/api/promote-output", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ metadataPath: item.metadataPath, outputFile: item.outputFile }) });
+      if (!response.ok) throw new Error("Could not promote output.");
+      setCuratedSaves((current) => ({ ...current, [key]: "saved" }));
+    } catch {
+      setCuratedSaves((current) => ({ ...current, [key]: "error" }));
+    }
+  }
+
+  async function deletePrototype(project: StudioProject, prototype: StudioProject["prototypes"][number]) {
+    if (data?.readOnly || !window.confirm(`Delete the ${prototype.title} prototype and all of its local files?`)) return;
+    try {
+      const response = await fetch("/api/delete-prototype", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId: project.metadata.id, slug: prototype.slug }) });
+      if (!response.ok) throw new Error("Could not delete prototype.");
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
   function openGeneration(target: StudioGeneration) {
     const sequence = data?.generations.filter((candidate) => candidate.projectId === target.projectId) ?? [target];
     const index = sequence.findIndex((candidate) => candidate.metadataPath === target.metadataPath && candidate.outputFile === target.outputFile);
@@ -249,9 +287,9 @@ export default function App() {
 
       {activeProject && view === "brief" && <DocumentView project={activeProject} />}
       {activeProject && view === "references" && <References project={activeProject} />}
-      {activeProject && view === "prototypes" && <Prototypes project={activeProject} />}
+      {activeProject && view === "prototypes" && <Prototypes project={activeProject} onDelete={(prototype) => void deletePrototype(activeProject, prototype)} />}
     </main>
-    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} project={data.projects.find((project) => project.metadata.id === lightboxItems[selected]!.projectId)} generations={data.generations} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} onOpenGeneration={openGeneration} />}
+    {selected !== undefined && lightboxItems[selected] && <Lightbox item={lightboxItems[selected]} project={data.projects.find((project) => project.metadata.id === lightboxItems[selected]!.projectId)} generations={data.generations} position={selected} total={lightboxItems.length} saveState={reviewSaves[lightboxItems[selected]!.metadataPath] ?? "idle"} curatedState={curatedSaves[`${lightboxItems[selected]!.metadataPath}:${lightboxItems[selected]!.outputFile}`] ?? "idle"} onClose={() => { setSelected(undefined); setLightboxItems([]); }} onMove={(step) => setSelected((selected + step + lightboxItems.length) % lightboxItems.length)} onReview={(patch) => void patchReview(lightboxItems[selected]!, patch)} onDelete={() => void deleteOutput(lightboxItems[selected]!)} onPromote={() => void promoteOutput(lightboxItems[selected]!)} onOpenGeneration={openGeneration} />}
   </div>;
 }
 
@@ -280,7 +318,7 @@ function ActivityLight({ readOnly, activity, scannedAt, pending, stale, refreshi
 
 function GalleryCard({ item, onOpen, onReview }: { item: StudioGeneration; onOpen: () => void; onReview: (patch: ReviewPatch) => void }) {
   return <article className={`card ${item.metadata.review.signal === "reject" ? "rejected" : ""}`}>
-    <button className="artwork" onClick={onOpen}><Media item={item} hoverPlay thumbnail /><span className="kind">{friendlyCategory(item.category)}</span><span className="shot-number">#{item.shotNumber}</span></button>
+    <button className="artwork" onClick={onOpen}><Media item={item} hoverPlay thumbnail />{item.mediaType === "video" && <span className="video-badge" aria-label="Video output" title="Video output"><VideoIcon /></span>}<span className="kind">{friendlyCategory(item.category)}</span><span className="shot-number">#{item.shotNumber}</span></button>
     <button className={`heart card-heart ${item.metadata.review.favourite ? "active" : ""}`} aria-label={`Favourite shot ${item.shotNumber}`} onClick={() => onReview(item.metadata.review.favourite ? clearDirection() : { favourite: true, signal: "unreviewed" })}>♥</button>
   </article>;
 }
@@ -306,7 +344,12 @@ function Media({ item, hoverPlay = false, autoPlay = false, thumbnail = false }:
   if (item.mediaType !== "video") return <img src={(thumbnail && item.thumbnailUrl) || item.imageUrl} alt={item.metadata.prompt} loading="lazy" decoding="async" onError={() => setFailed(true)} />;
   const play = () => { if (hoverPlay) void video.current?.play(); };
   const pause = () => { if (hoverPlay && video.current) { video.current.pause(); video.current.currentTime = 0; } };
-  return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : "none"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} onError={() => setFailed(true)} />;
+  const showFirstFrame = () => {
+    if (!thumbnail || !video.current || !Number.isFinite(video.current.duration)) return;
+    video.current.currentTime = Math.min(0.1, Math.max(0, video.current.duration / 2));
+    video.current.pause();
+  };
+  return <video ref={video} className="media-video" src={item.imageUrl} muted playsInline loop preload={autoPlay ? "auto" : thumbnail ? "metadata" : "none"} autoPlay={autoPlay} aria-label={item.metadata.prompt} onLoadedMetadata={showFirstFrame} onLoadedData={showFirstFrame} onMouseEnter={play} onMouseLeave={pause} onFocus={play} onBlur={pause} onError={() => setFailed(true)} />;
 }
 
 function ModelMarker() {
@@ -389,7 +432,7 @@ function LightboxShell({ ariaLabel, onClose, onMove, canMove = true, art, detail
   </div>;
 }
 
-function Lightbox({ item, project, generations, position, total, saveState, onClose, onMove, onReview, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onOpenGeneration: (item: StudioGeneration) => void }) {
+function Lightbox({ item, project, generations, position, total, saveState, curatedState, onClose, onMove, onReview, onDelete, onPromote, onOpenGeneration }: { item: StudioGeneration; project?: StudioProject; generations: StudioGeneration[]; position: number; total: number; saveState: ReviewSaveState; curatedState: ReviewSaveState; onClose: () => void; onMove: (step: number) => void; onReview: (patch: ReviewPatch) => void; onDelete: () => void; onPromote: () => void; onOpenGeneration: (item: StudioGeneration) => void }) {
   const [note, setNote] = useState(item.metadata.review.note ?? "");
   const [tags, setTags] = useState(item.metadata.review.tags.join(", "));
   useEffect(() => {
@@ -411,7 +454,7 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
     art={<Media key={`${item.metadataPath}-${item.outputFile}`} item={item} autoPlay />}
     details={<>
       <p className="eyebrow">Shot #{item.shotNumber} · {friendlyCategory(item.category)} · {position + 1} / {total}</p>
-      <h2>{item.projectTitle}</h2>
+      <div className="lightbox-title"><h2>{item.projectTitle}</h2><button className="delete-action" type="button" aria-label="Delete output" title="Delete output" onClick={onDelete}><TrashIcon /></button></div>
       <div className="review-guide">
         <p>Choose one directional signal per image. Select it again to clear.</p>
         <p><strong>Favourite</strong> = strongest · <strong>Shortlist</strong> = develop · <strong>Reject</strong> = stop pursuing</p>
@@ -421,6 +464,7 @@ function Lightbox({ item, project, generations, position, total, saveState, onCl
         <button className={`review-shortlist ${item.metadata.review.signal === "shortlist" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "shortlist" ? clearDirection() : { favourite: false, signal: "shortlist" })}>Shortlist <kbd>2</kbd></button>
         <button className={`review-reject ${item.metadata.review.signal === "reject" ? "active" : ""}`} onClick={() => onReview(item.metadata.review.signal === "reject" ? clearDirection() : { favourite: false, signal: "reject" })}>Reject <kbd>3</kbd></button>
       </div>
+      <button className="curated-action" type="button" disabled={curatedState === "saving" || curatedState === "saved"} onClick={onPromote}>{curatedState === "saved" ? "✓ In curated library" : curatedState === "saving" ? "Promoting…" : "Promote to library"}</button>
       <p className={`review-save ${saveState}`} role="status" aria-live="polite">{saveState === "saving" ? "Saving…" : saveState === "saved" ? "✓ Saved to project files" : saveState === "error" ? "Couldn’t save — try again" : ""}</p>
       <Detail label="Prompt"><p className="prompt">{item.metadata.prompt}</p></Detail>
       <div className="facts"><Fact label="Model" value={item.metadata.model} /><Fact label="Cost" value={cost ? `${cost.kind === "estimate" ? "~" : ""}$${cost.amount.toFixed(3)}` : "Unknown"} /><Fact label="Created" value={new Date(item.metadata.createdAt).toLocaleString()} /><Fact label="Dimensions" value={dimensions(item.metadata)} /></div>
@@ -490,7 +534,7 @@ function ReferenceLightbox({ references, position, onClose, onMove }: { referenc
   />;
 }
 
-function Prototypes({ project }: { project: StudioProject }) {
+function Prototypes({ project, onDelete }: { project: StudioProject; onDelete: (prototype: StudioProject["prototypes"][number]) => void }) {
   const [selectedSlug, setSelectedSlug] = useState(project.prototypes.find((prototype) => prototype.launchUrl)?.slug ?? project.prototypes[0]?.slug);
   useEffect(() => { setSelectedSlug(project.prototypes.find((prototype) => prototype.launchUrl)?.slug ?? project.prototypes[0]?.slug); }, [project.metadata.id, project.prototypes]);
   const selected = project.prototypes.find((prototype) => prototype.slug === selectedSlug);
@@ -503,7 +547,7 @@ function Prototypes({ project }: { project: StudioProject }) {
       </button>)}
     </aside>
     {selected && <section className="prototype-stage">
-      <header><div><p className="eyebrow">{selected.kind} prototype</p><h2>{selected.title}</h2>{selected.description && <p>{selected.description}</p>}</div>{selected.launchUrl && <a href={selected.launchUrl} target="_blank" rel="noreferrer">Open in new tab ↗</a>}</header>
+      <header><div><p className="eyebrow">{selected.kind} prototype</p><h2>{selected.title}</h2>{selected.description && <p>{selected.description}</p>}</div><div className="prototype-actions">{selected.launchUrl && <a href={selected.launchUrl} target="_blank" rel="noreferrer">Open in new tab ↗</a>}<button type="button" className="delete-action" aria-label="Delete prototype" title="Delete prototype" onClick={() => onDelete(selected)}><TrashIcon /></button></div></header>
       {selected.launchUrl && selected.embeddable
         ? <iframe src={selected.launchUrl} title={`${selected.title} prototype`} sandbox="allow-scripts allow-forms allow-modals allow-popups allow-same-origin allow-downloads" />
         : <div className="prototype-empty"><p>{selected.launchUrl ? "This prototype is configured to open separately." : "There isn’t a runnable preview yet."}</p><code>{selected.path}</code>{!selected.launchUrl && <small>Add an <strong>index.html</strong>, or a <strong>prototype.json</strong> pointing to its local development URL.</small>}</div>}
@@ -521,6 +565,8 @@ function ThemeControl({ value, onChange }: { value: ThemePreference; onChange: (
 }
 
 function Empty({ hasProjects }: { hasProjects: boolean }) { return <div className="empty"><p className="eyebrow">A quiet canvas</p><h2>{hasProjects ? "No outputs match this view." : "No projects yet."}</h2><p>{hasProjects ? "Adjust the filters or run a small probe." : "Projects will appear here as they are added to the filesystem."}</p>{hasProjects && <code>pnpm lab probe &lt;project&gt; …</code>}</div>; }
+function VideoIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h6.2A1.3 1.3 0 0 1 10.5 4.8v1.1l2.2-1.5a.8.8 0 0 1 1.3.65v5.9a.8.8 0 0 1-1.3.65l-2.2-1.5v1.1a1.3 1.3 0 0 1-1.3 1.3H3a1.3 1.3 0 0 1-1.3-1.3V4.8A1.3 1.3 0 0 1 3 3.5Z" /></svg>; }
+function TrashIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.1 2.5h5.8l.5 1.5h2.1v1H2.5V4h2.1l.5-1.5ZM4 6h8l-.5 7.5h-7L4 6Zm2 1.2v5h1v-5H6Zm3 0v5h1v-5H9ZM6.3 1h3.4l.4 1.5H5.9L6.3 1Z" /></svg>; }
 function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) { return <label><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}><option value="all">All</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>; }
 function Detail({ label, children }: { label: string; children: React.ReactNode }) { return <section className="detail-section"><h3>{label}</h3>{children}</section>; }
 function Fact({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div>; }

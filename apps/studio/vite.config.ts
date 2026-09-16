@@ -108,6 +108,29 @@ function filesystemApi(): Plugin {
             suppressWatchUntil = Date.now() + 1_000;
             return json(response, await repository.updateStatus(body.projectId, body.status));
           }
+          if (request.method === "POST" && url.pathname === "/api/delete-output") {
+            const body = await readBody(request) as { metadataPath?: string; outputFile?: string };
+            if (!body.metadataPath || !body.outputFile) return json(response, { error: "Invalid output deletion payload" }, 400);
+            suppressWatchUntil = Date.now() + 1_000;
+            await repository.deleteOutput(resolve(repositoryRoot, body.metadataPath), body.outputFile);
+            return json(response, { ok: true });
+          }
+          if (request.method === "POST" && url.pathname === "/api/promote-output") {
+            const body = await readBody(request) as { metadataPath?: string; outputFile?: string };
+            if (!body.metadataPath || !body.outputFile) return json(response, { error: "Invalid promotion payload" }, 400);
+            const sourcePath = resolve(repositoryRoot, body.metadataPath);
+            if (!inside(projectsRoot, sourcePath) || !inside(projectsRoot, resolve(dirname(sourcePath), body.outputFile))) return json(response, { error: "Invalid promotion path" }, 403);
+            const payload = await curatedPayload(sourcePath, body.outputFile);
+            suppressWatchUntil = Date.now() + 1_000;
+            return json(response, await repository.promoteOutput(sourcePath, body.outputFile, payload.bytes, payload.extension));
+          }
+          if (request.method === "POST" && url.pathname === "/api/delete-prototype") {
+            const body = await readBody(request) as { projectId?: string; slug?: string };
+            if (!body.projectId || !body.slug) return json(response, { error: "Invalid prototype deletion payload" }, 400);
+            suppressWatchUntil = Date.now() + 1_000;
+            await repository.deletePrototype(body.projectId, body.slug);
+            return json(response, { ok: true });
+          }
           if (request.method === "GET" && url.pathname === "/project-file") {
             const relativePath = url.searchParams.get("path") ?? "";
             const path = resolve(repositoryRoot, relativePath);
@@ -269,6 +292,18 @@ function mediaTypeFor(path: string): "image" | "video" | "model" {
   if (isVideoFile(path)) return "video";
   if (isModelFile(path)) return "model";
   return "image";
+}
+
+async function curatedPayload(metadataPath: string, outputFile: string): Promise<{ bytes: Uint8Array; extension: string }> {
+  const sourcePath = join(dirname(metadataPath), outputFile);
+  const extension = extname(outputFile).toLowerCase();
+  if ([".png", ".jpg", ".jpeg", ".webp", ".avif"].includes(extension)) {
+    try {
+      const sharp = (await import("sharp")).default;
+      return { bytes: await sharp(sourcePath).rotate().resize({ width: 2048, withoutEnlargement: true }).webp({ quality: 90 }).toBuffer(), extension: ".webp" };
+    } catch { /* Optional Sharp is unavailable; preserve the original bytes. */ }
+  }
+  return { bytes: await readFile(sourcePath), extension };
 }
 
 function legacyCategory(purpose: string): string {

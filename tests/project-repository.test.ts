@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,6 +15,23 @@ async function setup() {
 }
 
 describe("ProjectRepository", () => {
+  it("finds the projects root by walking up, so commands work from inside a project", async () => {
+    const root = await mkdtemp(join(tmpdir(), "figment-test-"));
+    temporaryRoots.push(root);
+    const nested = join(root, "projects", "2026", "a-project", "probes");
+    await mkdir(nested, { recursive: true });
+    const cwd = process.cwd();
+    const previous = process.env.FIGMENT_PROJECTS_DIR;
+    delete process.env.FIGMENT_PROJECTS_DIR;
+    try {
+      process.chdir(nested);
+      expect(new ProjectRepository().root).toBe(await realpath(join(root, "projects")));
+    } finally {
+      process.chdir(cwd);
+      if (previous !== undefined) process.env.FIGMENT_PROJECTS_DIR = previous;
+    }
+  });
+
   it("uses the creation year and creates the human-readable anatomy", async () => {
     const repository = await setup();
     const project = await repository.create({ title: "Goob", now: new Date("2027-01-02T10:00:00Z") });

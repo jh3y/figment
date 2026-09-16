@@ -1,4 +1,5 @@
 import { access, mkdir, readFile, readdir } from "node:fs/promises";
+import { statSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import {
   atomicWrite,
@@ -36,10 +37,28 @@ interface ShotIndex {
   shots: Record<string, number>;
 }
 
+// Resolving `projects` against the working directory means every command has to
+// be run from the checkout root, which bites exactly when you are inside a
+// project and reach for the CLI. Walk up for the nearest `projects` directory
+// the way git finds its root, and fall back to the old behaviour when there is
+// none — a fresh clone before the first `lab new`.
+function findProjectsRoot(from = process.cwd()): string {
+  let dir = resolve(from);
+  for (;;) {
+    const candidate = join(dir, "projects");
+    try {
+      if (statSync(candidate).isDirectory()) return candidate;
+    } catch { /* not here; keep walking */ }
+    const parent = dirname(dir);
+    if (parent === dir) return resolve("projects");
+    dir = parent;
+  }
+}
+
 export class ProjectRepository {
   readonly root: string;
 
-  constructor(root = resolve(process.env.FIGMENT_PROJECTS_DIR ?? "projects")) {
+  constructor(root = process.env.FIGMENT_PROJECTS_DIR ? resolve(process.env.FIGMENT_PROJECTS_DIR) : findProjectsRoot()) {
     this.root = root;
   }
 
